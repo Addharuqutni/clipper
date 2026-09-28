@@ -59,6 +59,26 @@ class LocalEventBus:
                 loop.call_soon_threadsafe(queue.put_nowait, event)
 
 
+def is_canceled(job_id: str) -> bool:
+    """Benar bila job sudah dibatalkan atau dihapus pengguna.
+
+    Dipakai di tengah pekerjaan panjang yang **tidak** melewati ``emit``:
+    pembacaan segmen Whisper yang malas (satu segmen bisa puluhan detik) dan
+    proses anak (FFmpeg/yt-dlp) sebelum menunggu berikutnya. Tanpa ini,
+    pembatalan baru terlihat di titik periksa ``emit`` berikutnya.
+    """
+    from clipper_shared.db import get_db_connection
+
+    try:
+        with get_db_connection() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT status FROM jobs WHERE id = %s", (job_id,))
+            row = cursor.fetchone()
+    except Exception:  # noqa: BLE001 — DB sesaat sibuk tidak boleh membatalkan job
+        logger.warning("Gagal memeriksa status pembatalan job %s", job_id, exc_info=True)
+        return False
+    return row is None or row[0] == "canceled"
+
+
 def emit(job_id: str, status: str, stage: str, progress: int, message: str | None = None) -> None:
     """Perbarui status job, catat di ``job_events``, dan siarkan ke SSE.
 

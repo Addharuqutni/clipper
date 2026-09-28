@@ -237,6 +237,7 @@ def composite_overlays(
     crf: int,
     preset: str,
     ffmpeg_threads: int,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     """Komposisikan overlay ke dalam video.
 
@@ -262,7 +263,7 @@ def composite_overlays(
         preset=preset,
         ffmpeg_threads=ffmpeg_threads,
     )
-    result = run_ffmpeg(args)
+    result = run_ffmpeg(args, job_id=job_id)
 
     if not result.ok:
         raise RuntimeError(

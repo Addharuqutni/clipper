@@ -18,11 +18,11 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from clipper_shared.processes import run_process
 from clipper_shared.subtitles import SubtitleTrack, parse_subtitle, pick_track
 
 logger = logging.getLogger(__name__)
@@ -171,21 +171,21 @@ def _ytdlp_base_args(cookies_path: Path | None) -> list[str]:
     return args
 
 
-def fetch_youtube_metadata(url: str, cookies_path: Path | None = None) -> YoutubeMetadata:
+def fetch_youtube_metadata(url: str, cookies_path: Path | None = None, *, job_id: str) -> YoutubeMetadata:
     """Ambil metadata video tanpa mengunduh isinya.
 
     ``-J`` mengeluarkan JSON lengkap termasuk daftar subtitle. Ini dipakai untuk
     memvalidasi lebih dulu: durasi, status live, dan keberadaan subtitle — semua
     sebelum menyentuh berkas besar.
     """
-    result = subprocess.run(  # noqa: S603
+    result = run_process(
         # "--" wajib: tanpa itu, nilai berawalan "-" dibaca sebagai opsi yt-dlp
         # (mis. --config-locations / --exec), bukan sebagai URL.
         [*_ytdlp_base_args(cookies_path), "-J", "--", url],
+        job_id=job_id,
         capture_output=True,
         text=True,
-        timeout=YTDLP_TIMEOUT_S,
-        check=False,
+        timeout_s=YTDLP_TIMEOUT_S,
     )
 
     if result.returncode != 0:
@@ -288,6 +288,8 @@ def download_youtube(
     work_dir: Path,
     cookies_path: Path | None = None,
     max_height: int = 1080,
+    *,
+    job_id: str,
 ) -> Path:
     """Unduh video YouTube ke direktori kerja.
 
@@ -296,7 +298,7 @@ def download_youtube(
     tajam daripada sumbernya setelah crop.
     """
     template = str(work_dir / "source.%(ext)s")
-    result = subprocess.run(  # noqa: S603
+    result = run_process(
         [
             # Binary TIDAK ditulis ulang di sini: `_ytdlp_base_args` sudah
             # menyertakannya. Menambahkannya dua kali membuat yt-dlp menerima
@@ -312,10 +314,10 @@ def download_youtube(
             "--",
             url,
         ],
+        job_id=job_id,
         capture_output=True,
         text=True,
-        timeout=YTDLP_TIMEOUT_S,
-        check=False,
+        timeout_s=YTDLP_TIMEOUT_S,
     )
 
     if result.returncode != 0:

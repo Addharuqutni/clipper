@@ -10,6 +10,7 @@ wajah.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -20,7 +21,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
 
+from clipper_shared.processes import kill_process_tree, spawn, unregister, wait_with_cancel
 from clipper_shared.storage import binary
+from clipper_shared.worker_events import JobCanceled, is_canceled
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +105,7 @@ def run_ffmpeg(
     command: list[str],
     *,
     timeout_s: float | None = None,
+    job_id: str | None = None,
 ) -> EncodeResult:
     """Jalankan FFmpeg sekali jalan tanpa masukan frame dari memori.
 
@@ -109,33 +113,49 @@ def run_ffmpeg(
     mux audio, burn subtitle). Untuk tahap ini, thread pembuangan stderr tetap
     dipakai karena argumen yang salah dapat membuat FFmpeg menulis ribuan baris
     log lalu memblokir.
+
+    ``job_id`` mendaftarkan proses ini agar pembatalan job memutusnya seketika
+    (lihat :mod:`clipper_shared.processes`).
+
+    Raises:
+        JobCanceled: job dibatalkan saat encode berjalan; proses sudah mati.
     """
     started = time.monotonic()
-    process = subprocess.Popen(  # noqa: S603
+    process = spawn(
         command,
+        job_id=job_id,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         bufsize=0,
     )
 
-    if process.stderr is None:
-        process.kill()
-        raise RuntimeError("Gagal menyiapkan pipa stderr FFmpeg.")
-
-    collector = _StderrCollector(stream=process.stderr)
-    collector.start()
-
     try:
-        returncode = process.wait(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        returncode = process.wait()
-        logger.error("FFmpeg melewati batas waktu %.0f detik dan dimatikan.", timeout_s or 0)
-    finally:
-        collector.join()
+        if process.stderr is None:
+            process.kill()
+            raise RuntimeError("Gagal menyiapkan pipa stderr FFmpeg.")
 
-    process.stderr.close()
+        collector = _StderrCollector(stream=process.stderr)
+        collector.start()
+
+        try:
+            returncode = wait_with_cancel(process, job_id=job_id, timeout_s=timeout_s)
+        except subprocess.TimeoutExpired:
+            kill_process_tree(process)
+            returncode = process.wait()
+            logger.error("FFmpeg melewati batas waktu %.0f detik dan dimatikan.", timeout_s or 0)
+        finally:
+            collector.join()
+
+        process.stderr.close()
+
+        # Proses bisa mati karena dimatikan API (balapan dengan poll di
+        # wait_with_cancel): jangan laporkan sebagai kegagalan encode.
+        if returncode != 0 and job_id is not None and is_canceled(job_id):
+            raise JobCanceled(job_id)
+    finally:
+        if job_id is not None:
+            unregister(job_id, process)
 
     return EncodeResult(
         returncode=returncode,
@@ -152,6 +172,7 @@ def iter_video_frames(
     height: int,
     start_s: float = 0.0,
     duration_s: float = 0.0,
+    job_id: str | None = None,
 ) -> Iterator[bytes]:
     """Baca frame video sebagai BGR mentah dari ``stdout`` FFmpeg.
 
@@ -165,6 +186,12 @@ def iter_video_frames(
     ``start_s``, mendekode darinya, lalu membuang frame sampai tepat di
     ``start_s``. Hal yang sama pada jalur ``-c copy`` TIDAK akurat (hanya bisa
     mulai di keyframe), jadi jangan pakai parameter ini untuk copy.
+
+    ``job_id`` mendaftarkan proses ini agar pembatalan job memutusnya; setiap
+    frame juga diperiksa terhadap pembatalan.
+
+    Raises:
+        JobCanceled: job dibatalkan saat pembacaan frame berlangsung.
     """
     frame_bytes = width * height * 3
     args: list[str] = [
@@ -186,25 +213,39 @@ def iter_video_frames(
         "-",
     ]
 
-    process = subprocess.Popen(  # noqa: S603 — argumen dibangun internal
+    process = spawn(
         args,
+        job_id=job_id,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         bufsize=frame_bytes * 2,
     )
 
-    if process.stdout is None:
-        process.kill()
-        raise RuntimeError("Gagal menyiapkan pipa stdout FFmpeg untuk pembacaan frame.")
-
     try:
+        if process.stdout is None:
+            process.kill()
+            raise RuntimeError("Gagal menyiapkan pipa stdout FFmpeg untuk pembacaan frame.")
+
         while True:
             frame = process.stdout.read(frame_bytes)
             if len(frame) < frame_bytes:
                 break
+            # Pelacakan wajah membaca ribuan frame dalam sekali panggilan;
+            # tanpa pemeriksaan di sini pembatalan baru terlihat setelah
+            # seluruh segmen selesai dilacak.
+            if job_id is not None and is_canceled(job_id):
+                raise JobCanceled(job_id)
             yield frame
+        # Proses bisa mati karena dimatikan API (balapan dengan poll di atas);
+        # sebagian frame tidak boleh dianggap sebagai hasil yang sah.
+        if job_id is not None and is_canceled(job_id):
+            raise JobCanceled(job_id)
     finally:
-        process.stdout.close()
+        if process.stdout is not None:
+            process.stdout.close()
         if process.poll() is None:
-            process.kill()
-        process.wait()
+            kill_process_tree(process)
+        with contextlib.suppress(Exception):
+            process.wait()
+        if job_id is not None:
+            unregister(job_id, process)

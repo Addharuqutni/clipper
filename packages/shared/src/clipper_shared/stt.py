@@ -79,6 +79,21 @@ class Transcriber(Protocol):
         ...
 
 
+def check_canceled(job_id: str | None) -> None:
+    """Lempar :class:`JobCanceled` bila job sudah dibatalkan/dihapus.
+
+    Dipakai di dalam jalur transkripsi yang panjang: satu panggilan
+    ``transcribe`` bisa berjalan puluhan menit, sedangkan pembatalan hanya
+    terlihat di titik periksa ``emit`` bila tidak diperiksa di sini.
+    Toleran terhadap DB yang sesaat tidak terbaca (lihat ``is_canceled``):
+    kegagalan infrastruktur tidak boleh membatalkan pekerjaan pengguna.
+    """
+    from clipper_shared.worker_events import JobCanceled, is_canceled
+
+    if job_id is not None and is_canceled(job_id):
+        raise JobCanceled(job_id)
+
+
 class FasterWhisperLocal(Transcriber):
     """Implementasi default MVP — ``faster-whisper`` CPU int8 (TECH_SPEC §0.1).
 
@@ -95,6 +110,7 @@ class FasterWhisperLocal(Transcriber):
         download_root: str | None = None,
         beam_size: int = 1,
         vad: bool = False,
+        job_id: str | None = None,
     ) -> None:
         self.model_size = model_size
         self.device = device
@@ -106,6 +122,8 @@ class FasterWhisperLocal(Transcriber):
         self.beam_size = beam_size
         # VAD nonaktif secara bawaan — lihat penjelasan di transcribe().
         self.vad = vad
+        #: Job yang sedang ditranskripsi; dipakai untuk memutus antar segmen.
+        self.job_id = job_id
         self._model: Any | None = None  # lazy, ctranslate2 WhisperModel
 
     def _load_model(self) -> Any:
@@ -155,6 +173,11 @@ class FasterWhisperLocal(Transcriber):
         speakers: list[dict[str, Any]] = []
 
         for segment in segments:
+            # Generator segmen Whisper bersifat malas: satu segmen memakan
+            # waktu nyata yang sama dengan durasinya. Memeriksa di sini membuat
+            # pembatalan berhenti dalam hitungan detik, bukan setelah seluruh
+            # rekaman selesai ditranskripsi.
+            check_canceled(self.job_id)
             text = (segment.text or "").strip()
             if not text:
                 continue
@@ -212,11 +235,14 @@ class RemoteWhisperAPI(Transcriber):
         base_url: str | None = None,
         model: str = "whisper-1",
         timeout_s: float = 600.0,
+        job_id: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
         self.timeout_s = timeout_s
+        #: Job yang sedang ditranskripsi; diperiksa di sekitar unggahan audio.
+        self.job_id = job_id
 
     def transcribe(self, audio_path: str, language: str | None) -> TranscriptResult:
         """Kirim audio ke API dan normalisasi respons ke TranscriptResult.
@@ -234,6 +260,11 @@ class RemoteWhisperAPI(Transcriber):
         import time
 
         import httpx
+
+        # Sebelum mengirim: jangan unggah audio besar untuk job yang sudah
+        # dibatalkan. (Pembatalan di TENGAH panggilan jaringan menunggu
+        # timeout HTTP; itu batas yang sama dengan API eksternal mana pun.)
+        check_canceled(self.job_id)
 
         started = time.monotonic()
         base = (self.base_url or "https://api.openai.com/v1").rstrip("/")
@@ -331,6 +362,7 @@ def get_transcriber(
     download_root: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    job_id: str | None = None,
 ) -> Transcriber:
     """Factory: pilih implementasi berdasarkan env ``STT_BACKEND``.
 
@@ -351,9 +383,10 @@ def get_transcriber(
             model_size=model_size,
             compute_type=compute_type,
             download_root=download_root,
+            job_id=job_id,
         )
     if normalized == "remote":
         if not api_key:
             raise ValueError("STT_BACKEND=remote membutuhkan WHISPER_API_KEY")
-        return RemoteWhisperAPI(api_key=api_key, base_url=base_url)
+        return RemoteWhisperAPI(api_key=api_key, base_url=base_url, job_id=job_id)
     raise ValueError(f"STT_BACKEND tidak dikenal: {backend!r} (harus 'local' atau 'remote')")

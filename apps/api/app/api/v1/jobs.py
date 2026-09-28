@@ -363,11 +363,16 @@ async def rescore_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSessio
 
 @router.post("/{job_id}/cancel", response_model=JobResponse, summary="Batalkan job")
 async def cancel_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession) -> JobResponse:
-    """Batalkan job. Tahap yang sedang berjalan berhenti di titik periksa berikutnya.
+    """Batalkan job dan putus proses FFmpeg/yt-dlp/Whisper yang sedang berjalan.
 
-    Proses FFmpeg/Whisper yang sudah mulai tidak diputus paksa; hasilnya
-    dibuang dan tahap berikutnya tidak dijadwalkan.
+    Status ``canceled`` ditulis lebih dulu, baru proses anak dimatikan: worker
+    yang melihat prosesnya mati memeriksa basis data, menemukan ``canceled``,
+    lalu berhenti lewat :class:`~clipper_shared.worker_events.JobCanceled` tanpa
+    menandai job (atau render) gagal. Whisper lokal diperiksa antar segmen
+    (generatornya malas), jadi pembatalan juga berhenti dalam hitungan detik.
     """
+    from clipper_shared.processes import terminate_job
+
     job = await get_owned_job(db, current_user.id, job_id)
     if job.status in ACTIVE_STATUSES:
         job.status, job.error = "canceled", "Dibatalkan pengguna."
@@ -379,6 +384,9 @@ async def cancel_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession
         )
         await db.commit()
         await db.refresh(job)
+        # Setelah status tersimpan: mematikan proses lebih dulu berlomba dengan
+        # worker yang melihat proses mati dan bisa menandai job gagal.
+        await asyncio.to_thread(terminate_job, str(job.id))
     return _to_response(job)
 
 

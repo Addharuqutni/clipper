@@ -72,7 +72,7 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
                 raise IngestError("URL YouTube tidak diberikan.")
             emit(job_id, "running", "ingest", 15, "Membaca metadata video")
             cookies_path = storage.fetch_youtube_cookies(job_id, work_dir)
-            metadata = fetch_youtube_metadata(source_url, cookies_path)
+            metadata = fetch_youtube_metadata(source_url, cookies_path, job_id=job_id)
             validate_duration(metadata, max_minutes)
 
             # JALUR CEPAT: subtitle yang sudah ada memangkas tahap terpanjang
@@ -90,13 +90,13 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
                     emit(job_id, "running", "ingest", 40, f"Subtitle diterima ({quality})")
 
             emit(job_id, "running", "ingest", 45, "Mengunduh video")
-            downloaded = download_youtube(source_url, work_dir, cookies_path)
-            probe = storage.probe_media(downloaded)
+            downloaded = download_youtube(source_url, work_dir, cookies_path, job_id=job_id)
+            probe = storage.probe_media(downloaded, job_id=job_id)
             r2_key = storage.store_downloaded_media(job_id, downloaded)
         elif source_type == "upload":
             emit(job_id, "running", "ingest", 20, "Membaca berkas unggahan")
             media_path = storage.source_media_path(job_id)
-            probe = storage.probe_media(media_path)
+            probe = storage.probe_media(media_path, job_id=job_id)
             # Unggahan tidak punya metadata YouTube; batas durasi dicek dari
             # probe, SEBELUM transkripsi yang bisa makan waktu berjam-jam.
             if probe["duration_s"] > max_minutes * 60:
@@ -146,7 +146,7 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def _transcriber() -> Any:
+def _transcriber(job_id: str) -> Any:
     from clipper_shared.stt import get_transcriber
 
     return get_transcriber(
@@ -156,6 +156,7 @@ def _transcriber() -> Any:
         compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
         api_key=os.getenv("WHISPER_API_KEY") or None,
         base_url=os.getenv("WHISPER_API_BASE_URL") or None,
+        job_id=job_id,
     )
 
 
@@ -167,13 +168,13 @@ def transcribe_media(job_id: str, language: str | None = None) -> dict[str, Any]
     try:
         emit(job_id, "running", "transcribe", 25, "Transkripsi mulai")
         media_path = storage.source_media_path(job_id)
-        transcriber = _transcriber()
+        transcriber = _transcriber(job_id)
 
         emit(job_id, "running", "transcribe", 32, "Mengekstrak audio")
         if os.getenv("STT_BACKEND", "local").strip().lower() == "remote":
-            chunks = storage.extract_audio_chunks(media_path, work_dir)
+            chunks = storage.extract_audio_chunks(media_path, work_dir, job_id=job_id)
         else:
-            chunks = [(storage.extract_audio(media_path, work_dir), 0.0)]
+            chunks = [(storage.extract_audio(media_path, work_dir, job_id=job_id), 0.0)]
 
         words: list[dict[str, object]] = []
         texts: list[str] = []

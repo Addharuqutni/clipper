@@ -171,7 +171,7 @@ Sumber: instruksi pengguna 2026-09-26 ("easy use", "satu perintah", "tidak membu
 | **Status** | Accepted — menggantikan D3, T2, T3 |
 | **Konteks** | Pengguna tidak ingin memakai Docker. Mode distributed (PostgreSQL + Redis + Celery + S3/MinIO) hanya ada untuk deployment Docker/VPS dan belum pernah dijalankan; review menemukan >10 blocker di jalur itu, sementara kode dua-mode menggandakan setiap jalur (storage, event, slot, DB). |
 | **Keputusan** | Aplikasi murni lokal: satu proses FastAPI di `127.0.0.1` menjalankan pipeline di thread pool per tahap (`clipper_shared.dispatcher`; ukuran pool = batas paralel, menggantikan semaphore Redis), SQLite, dan disk (`clipper_shared.storage`). Dihapus: `docker-compose.yml`, Dockerfile, Alembic, Celery app, `slots.py`, `queue_names.py`, S3/boto3, Makefile, penjaga versi 3.12. Unggahan memakai endpoint lokal per potongan dengan resume. Saat startup job yatim ditandai gagal. |
-| **Konsekuensi** | Tidak ada auto-scale atau deployment server; memakai di VPS berarti menulis ulang lapisan antrean/penyimpanan. Pembatalan job berhenti di titik periksa (`emit`), tidak memutus FFmpeg/Whisper yang sedang berjalan. `.env` dimuat python-dotenv, bukan batch. |
+| **Konsekuensi** | Tidak ada auto-scale atau deployment server; memakai di VPS berarti menulis ulang lapisan antrean/penyimpanan. Pembatalan job memutus proses anak yang sedang berjalan (FFmpeg/yt-dlp terdaftar per job di `clipper_shared.processes`; Whisper berhenti antar segmen) — lihat `arsitektur.md`. `.env` dimuat python-dotenv, bukan batch. |
 
 Sumber: instruksi pengguna 2026-09-27 ("saya tidak ingin menggunakan docker"; pilihan "Hapus Docker + mode distributed").
 

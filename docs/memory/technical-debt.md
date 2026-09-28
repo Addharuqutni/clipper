@@ -15,7 +15,6 @@ Sumber: TECH_SPEC §5.2, §5.3; T9.
 | **Speaker diarization** (`pyannote`) | Terlalu berat di CPU | Saat GPU tersedia atau STT pindah ke API |
 | **Auto-scale / deployment server** | Aplikasi lokal saja (**T9**); tidak ada VPS/container | Bila perlu multi-pengguna di server (berarti menulis ulang lapisan antrean/penyimpanan) |
 | **Overlay B-roll = encode kedua** | Subtitle sudah satu pass dengan reframe; overlay butuh `filter_complex` dengan input tambahan | Bila render dengan overlay terasa lambat |
-| **Batal tidak memutus FFmpeg/Whisper yang berjalan** | Berhenti di titik periksa `emit`; proses anak dibiarkan selesai | Bila pembatalan cepat penting |
 | **Kandidat cadangan tanpa AI** = kepadatan kata | Heuristik murah saat penyedia AI gagal | Bila kualitas cadangan dikeluhkan |
 | **Akurasi `large-v3` penuh** | Kecepatan CPU | Saat GPU tersedia |
 

@@ -80,7 +80,7 @@ atas:
 
 | Tombol | Kapan | Fungsi |
 |---|---|---|
-| Batalkan | Job sedang diproses | Tahap berikutnya tidak dijalankan. |
+| Batalkan | Job sedang diproses | Menghentikan job, termasuk proses FFmpeg/yt-dlp/Whisper yang sedang berjalan. Tahap berikutnya tidak dijalankan. |
 | Proses ulang | Job gagal/dibatalkan/selesai | Mengulang dari unduhan/ingest. |
 | Analisis ulang | Job selesai atau gagal setelah transkripsi | Meminta AI memilih ulang momen memakai transkrip yang sudah ada (tanpa unduh/transkripsi ulang). |
 | Hapus | Kapan saja | Menghapus job, video sumber, dan hasil render. Salinan di `output\clips\` tetap ada. |

@@ -16,7 +16,6 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import uuid
 from pathlib import Path
 from typing import Any
@@ -24,6 +23,7 @@ from typing import Any
 from clipper_shared import storage as layout
 from clipper_shared.ai_provider import ProviderConfig
 from clipper_shared.db import get_db_connection, utc_now
+from clipper_shared.processes import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -108,18 +108,24 @@ def fetch_youtube_cookies(job_id: str, work_dir: Path) -> Path | None:
     return path
 
 
-def _run_ffmpeg(args: list[str], what: str) -> None:
-    result = subprocess.run(  # noqa: S603
+def _run_ffmpeg(args: list[str], what: str, job_id: str) -> None:
+    """Jalankan FFmpeg sekali jalan, terdaftar untuk pembatalan job.
+
+    Raises:
+        RuntimeError: FFmpeg keluar bukan nol.
+        JobCanceled: job dibatalkan; proses sudah dimatikan.
+    """
+    result = run_process(
         [layout.binary("ffmpeg"), "-y", "-nostdin", "-loglevel", "error", *args],
+        job_id=job_id,
         capture_output=True,
         text=True,
-        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"Gagal {what}: {result.stderr[-400:]}")
 
 
-def extract_audio(media_path: Path, work_dir: Path) -> Path:
+def extract_audio(media_path: Path, work_dir: Path, *, job_id: str) -> Path:
     """Ekstrak audio menjadi WAV mono 16 kHz untuk Whisper lokal.
 
     Whisper dilatih pada 16 kHz mono; memberinya 48 kHz stereo hanya menambah
@@ -129,11 +135,14 @@ def extract_audio(media_path: Path, work_dir: Path) -> Path:
     _run_ffmpeg(
         ["-i", str(media_path), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
         "mengekstrak audio",
+        job_id,
     )
     return target
 
 
-def extract_audio_chunks(media_path: Path, work_dir: Path, chunk_s: int = 600) -> list[tuple[Path, float]]:
+def extract_audio_chunks(
+    media_path: Path, work_dir: Path, *, job_id: str, chunk_s: int = 600
+) -> list[tuple[Path, float]]:
     """Audio untuk STT remote: MP3 32 kbps, dipotong per ``chunk_s`` detik.
 
     API Whisper OpenAI menolak berkas > 25 MB. WAV 16 kHz sudah menembus batas
@@ -152,6 +161,7 @@ def extract_audio_chunks(media_path: Path, work_dir: Path, chunk_s: int = 600) -
             str(pattern),
         ],
         "memotong audio",
+        job_id,
     )
     chunks = sorted(work_dir.glob("chunk-*.mp3"))
     return [(path, float(index * chunk_s)) for index, path in enumerate(chunks)]
@@ -272,18 +282,18 @@ def queue_renders(segment_ids: list[str], kind: str = "final") -> None:
             )
 
 
-def probe_media(path: Path) -> dict[str, Any]:
+def probe_media(path: Path, *, job_id: str) -> dict[str, Any]:
     """Baca metadata media dengan ffprobe.
 
     Lebar/tinggi yang dikembalikan adalah ukuran **tampilan**: video HP sering
     disimpan 1920x1080 dengan metadata rotasi 90°, dan FFmpeg memutarnya saat
     decode. Tanpa penukaran ini, semua perhitungan crop memakai orientasi salah.
     """
-    result = subprocess.run(  # noqa: S603
+    result = run_process(
         [layout.binary("ffprobe"), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+        job_id=job_id,
         capture_output=True,
         text=True,
-        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe gagal: {result.stderr[-400:]}")

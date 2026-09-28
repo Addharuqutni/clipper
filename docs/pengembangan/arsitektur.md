@@ -25,8 +25,12 @@ membuat antrean render yang panjang tidak menahan job baru di tahap ingest.
 
 **Status job** ditulis ke SQLite oleh `clipper_shared.worker_events.emit`,
 lalu disiarkan ke koneksi SSE di proses yang sama. `emit` melempar
-`JobCanceled` bila job dibatalkan/dihapus, sehingga task berhenti di titik
-periksa berikutnya.
+`JobCanceled` bila job dibatalkan/dihapus. **Pembatalan juga memutus proses
+anak**: setiap peluncuran FFmpeg/ffprobe/yt-dlp lewat `clipper_shared.processes`
+sehingga terdaftar per job, dan endpoint cancel memanggil `terminate_job`
+(pohon proses dimatikan dengan `taskkill /T /F` di Windows; POSIX memakai
+`proc.kill`). Whisper lokal diperiksa antar segmen karena generator segmennya
+malas. Job yang dibatalkan berakhir `canceled`, bukan `failed`.
 
 **Saat startup** (`app/main.py`): skema SQLite dibuat/diselaraskan, job dan
 render yang masih `queued`/`running` ditandai gagal (pasti sisa sesi yang

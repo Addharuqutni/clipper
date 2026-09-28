@@ -149,3 +149,43 @@ def test_sse_job_selesai_langsung_mengirim_end(client: TestClient) -> None:
         body = response.read().decode()
     assert "event: end" in body
     assert '"status": "done"' in body
+
+
+def test_cancel_memutus_proses_anak_yang_terdaftar(client: TestClient) -> None:
+    """Endpoint cancel harus mematikan proses anak job ini (bukan hanya status).
+
+    Prosesnya adalah interpreter sendiri yang tidur 60 detik — proses anak
+    sungguhan, sehingga yang dibuktikan adalah prosesnya benar-benar mati.
+    """
+    import subprocess
+    import sys
+    import time
+
+    from clipper_shared.db import get_db_connection
+
+    job_id = _create_upload_job(client)
+    # Job harus "aktif" agar cancel menjalankan pemutusan proses.
+    with get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE jobs SET status = 'running', stage = 'render' WHERE id = %s", (job_id,))
+
+    from clipper_shared.processes import registered_pids
+
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # noqa: S603
+    from clipper_shared.processes import register
+
+    register(job_id, process)
+    try:
+        assert registered_pids(job_id) == [process.pid]
+        assert process.poll() is None
+        assert client.post(f"/api/v1/jobs/{job_id}/cancel").json()["status"] == "canceled"
+
+        deadline = time.monotonic() + 5.0
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert process.poll() is not None, "proses anak masih hidup setelah cancel"
+    finally:
+        if process.poll() is None:
+            process.kill()
+        from clipper_shared.processes import unregister
+
+        unregister(job_id, process)

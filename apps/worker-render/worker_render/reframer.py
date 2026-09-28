@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from clipper_shared.processes import run_process
 from clipper_shared.reframe import (
     CropMode,
     CropSmoother,
@@ -76,14 +76,14 @@ class ReframeOptions:
     face_model_path: str = ""
 
 
-def probe_source(path: str | Path) -> SourceInfo:
+def probe_source(path: str | Path, *, job_id: str | None = None) -> SourceInfo:
     """Baca metadata video dengan ffprobe.
 
     Memakai ``ffprobe`` daripada OpenCV karena akurat untuk ``fps`` (angka
     pecahan seperti 29,97) dan dapat memberi tahu ada tidaknya trek audio —
     informasi yang menentukan langkah mux di akhir.
     """
-    result = subprocess.run(  # noqa: S603
+    result = run_process(
         [
             ffprobe_executable(),
             "-v", "error",
@@ -92,9 +92,9 @@ def probe_source(path: str | Path) -> SourceInfo:
             "-show_streams",
             str(path),
         ],
+        job_id=job_id,
         capture_output=True,
         text=True,
-        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe gagal membaca {path}: {result.stderr[-500:]}")
@@ -217,6 +217,7 @@ def compute_crop_positions(
     *,
     face_model_path: str = "",
     max_frames: int = 0,
+    job_id: str | None = None,
 ) -> tuple[list[int], str]:
     """Hitung posisi x crop untuk setiap frame dalam rentang.
 
@@ -254,6 +255,7 @@ def compute_crop_positions(
             height=info.height,
             start_s=start_s,
             duration_s=duration,
+            job_id=job_id,
         ):
             if last_frame and frame_index >= last_frame:
                 break
@@ -313,6 +315,7 @@ def build_video_filter(
     work: Path,
     *,
     source_path: Path,
+    job_id: str | None = None,
 ) -> tuple[str, str]:
     """Susun rantai filter video sesuai mode.
 
@@ -338,6 +341,7 @@ def build_video_filter(
         options.start_s,
         options.end_s,
         face_model_path=options.face_model_path,
+        job_id=job_id,
     )
 
     if positions:
@@ -366,6 +370,7 @@ def render_segment(
     work_dir: Path | None = None,
     subtitles: Path | None = None,
     fonts_dir: Path | None = None,
+    job_id: str | None = None,
 ) -> dict[str, object]:
     """Render satu segmen menjadi klip vertikal 9:16 dalam SATU pass encode.
 
@@ -397,7 +402,7 @@ def render_segment(
     work = work_dir or output_path.parent
     work.mkdir(parents=True, exist_ok=True)
 
-    info = probe_source(source_path)
+    info = probe_source(source_path, job_id=job_id)
     duration = options.end_s - options.start_s
     if duration <= 0:
         raise ValueError("end_s harus lebih besar dari start_s")
@@ -407,6 +412,7 @@ def render_segment(
         options,
         work,
         source_path=source_path,
+        job_id=job_id,
     )
     if subtitles is not None:
         # quote_filter_path, BUKAN escape_filter_path: nilai ini dibungkus
@@ -441,7 +447,8 @@ def render_segment(
             "-movflags", "+faststart",
             "-threads", str(options.ffmpeg_threads),
             str(output_path),
-        ]
+        ],
+        job_id=job_id,
     )
     if not encode_result.ok:
         if subtitles is not None and "No such filter: 'ass'" in encode_result.stderr_tail:

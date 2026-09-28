@@ -387,7 +387,7 @@ def render_clip(
         rendered = work_dir / "rendered.mp4"
         result = render_segment(
             source_path, rendered, options,
-            work_dir=work_dir, subtitles=subtitles, fonts_dir=_fonts_dir(job_id),
+            work_dir=work_dir, subtitles=subtitles, fonts_dir=_fonts_dir(job_id), job_id=job_id,
         )
         if result.get("tracking_health"):
             logger.info("Kesehatan pelacakan: %s", result["tracking_health"])
@@ -408,6 +408,7 @@ def render_clip(
                     crf=options.crf,
                     preset=options.preset,
                     ffmpeg_threads=options.ffmpeg_threads,
+                    job_id=job_id,
                 )
                 rendered = composited
             except RuntimeError as exc:
