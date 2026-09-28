@@ -1,0 +1,540 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   ClipperAI — TEMA NEO-BRUTALISM (light cream, kanonik)
+   Sumber: skill ui-ux-pro-max, domain `style` (Neo Brutalism) + `typography`
+   (Neo Brutalism Mobile / bold-only) + `color`.
+
+   Prinsip brutalism yang diterapkan:
+   - Border hitam TEBAL (2-4px) sebagai pengganti bayangan halus.
+   - Shadow KERAS tanpa blur (offset solid) — bukan `box-shadow` lembut.
+   - Sudut tajam (radius 0) atau radius sangat kecil. Tidak ada rounded-2xl.
+   - Warna blok menyala & kontras tinggi, bukan gradasi halus.
+   - Tipografi uppercase, berat (700/900), tracking lebar untuk label.
+   - Tidak ada gradasi, tidak ada glassmorphism, tidak ada blur dekoratif.
+
+   Font: sengaja TANPA unduhan eksternal (keputusan pengguna). Memakai tumpukan
+   grotesque sistem + font-display: swap secara implisit (tidak ada @font-face).
+   ========================================================================== */
+
+:root {
+  /* Palet inti neo-brutalism */
+  --paper: #fffdf5;        /* latar krem kanonik */
+  --ink: #0a0a0a;          /* hitam tegas untuk teks & border */
+  --panel: #ffffff;        /* permukaan kartu */
+  --muted-bg: #f0ebdd;     /* blok netral */
+  --muted-ink: #57534e;    /* teks sekunder, kontras >=4.5:1 di atas --paper */
+  --line: var(--ink);      /* garis/border — di brutalism selalu hitam */
+  --well: var(--ink);      /* area video & konsol */
+
+  /* Aksen menyala */
+  --accent: #ffd400;       /* kuning sinyal — CTA utama */
+  --accent-ink: #0a0a0a;
+  --toxic: #b6ff3c;        /* lime — status sukses/aktif */
+  --pink: #ff5c8a;         /* status gagal/peringatan */
+  --blue: #4d7cff;         /* status info */
+  --violet: #a78bfa;       /* aksen sekunder */
+  --rec: #ff3b30;          /* lampu rekam — klip sedang dirender */
+
+  /* Status job (dipakai halaman dashboard & review) */
+  --st-queued: #e2ddd0;
+  --st-running: var(--blue);
+  --st-done: var(--toxic);
+  --st-failed: var(--pink);
+
+  /* Geometri brutalism */
+  --bw: 3px;               /* ketebalan border utama */
+  --bw-thin: 2px;
+  --shadow: 4px 4px 0 0 var(--ink);        /* shadow keras tanpa blur */
+  --shadow-sm: 2px 2px 0 0 var(--ink);
+  --shadow-lg: 8px 8px 0 0 var(--ink);
+
+  /* Tipografi */
+  --font-grotesk: "Arial Black", "Helvetica Neue", Helvetica, Arial,
+    "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo,
+    Consolas, monospace;
+
+  /* Geometri tata letak — SATU sumber kebenaran untuk lebar & jarak.
+     Diubah di sini, seluruh aplikasi ikut berubah.
+
+     Catatan pemilihan lebar: 1200px (bukan 1240px) dipilih agar halaman
+     bentuk (upload/youtube) dan halaman data (dashboard) terasa seimbang.
+     Di 1240px, baris tabel dashboard menjadi terlalu panjang sehingga mata
+     sulit menelusuri baris ke kolom terakhir — keterbacaan tabel turun. */
+  --shell-max: 1240px;  /* lebar maksimum header/main/footer */
+  --shell-pad: 1.25rem; /* padding kiri-kanan wadah */
+  --page-max: 1200px;   /* batas lebar konten halaman */
+  --aside-w: 300px;     /* lebar panel samping (kolom kedua .split) */
+  --gap-section: 1.5rem; /* jarak antar-blok besar dalam satu halaman */
+  --gap-grid: 1.25rem;   /* jarak antar-kartu di dalam grid */
+  --panel-pad: 1.25rem;  /* padding dalam kartu/.panel */
+}
+
+* {
+  /* Brutalism: fokus keyboard harus terlihat tegas, bukan halo lembut. */
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+/* Sediakan ruang scrollbar di SEMUA halaman. Tanpa ini, halaman pendek
+   (tanpa scrollbar) lebih lebar ~7px dari halaman panjang, sehingga konten
+   dan navbar tampak "melompat" saat berpindah halaman. */
+html { scrollbar-gutter: stable; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-grotesk);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.45;
+  /* Tekstur kisi tipis ala kertas poster — sangat halus, tidak mengganggu
+     keterbacaan. Memberi kesan "cetak" khas brutalism. */
+  background-image:
+    linear-gradient(to right, rgba(10, 10, 10, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(10, 10, 10, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* --------------------------- Tipografi ---------------------------- */
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  margin: 0 0 0.5em;
+}
+
+h1 { font-size: clamp(2.5rem, 7vw, 4.5rem); }
+h2 { font-size: clamp(1.5rem, 3.5vw, 2.25rem); }
+h3 { font-size: 1.25rem; }
+
+/* Label kecil: uppercase + tracking lebar, sesuai panduan skill. */
+.label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 900;
+}
+
+.muted { color: var(--muted-ink); font-weight: 700; }
+.mono { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+a { color: inherit; }
+
+/* --------------------------- Komponen ----------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: var(--bw) solid var(--ink);
+  box-shadow: var(--shadow);
+  padding: var(--panel-pad);
+}
+
+/* Kartu yang bisa diklik: shadow "tertekan" saat hover/aktif. */
+.panel-interactive {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  cursor: pointer;
+}
+.panel-interactive:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow-lg); }
+.panel-interactive:active { transform: translate(2px, 2px); box-shadow: none; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: var(--bw) solid var(--ink);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.7rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  text-decoration: none;
+  min-height: 44px; /* target sentuh >=44px (checklist skill) */
+  transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+}
+.btn:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow); }
+.btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  /* Disabled harus JELAS non-interaktif: abu-abu, garis putus-putus,
+     tanpa shadow, kursor dilarang. Bukan hanya opacity turun. */
+  background: var(--muted-bg);
+  color: var(--muted-ink);
+  cursor: not-allowed;
+  box-shadow: none;
+  border-style: dashed;
+}
+.btn-primary { background: var(--accent); }
+.btn-toxic { background: var(--toxic); }
+.btn-dark { background: var(--ink); color: var(--paper); }
+.btn-lg { font-size: 1rem; padding: 0.95rem 1.6rem; }
+
+/* Fokus keyboard: outline tegas + offset, terlihat di semua latar. */
+:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+
+.badge {
+  display: inline-block;
+  border: var(--bw-thin) solid var(--ink);
+  background: var(--panel);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.badge-queued { background: var(--st-queued); }
+.badge-running { background: var(--st-running); color: #fff; }
+.badge-done { background: var(--st-done); }
+.badge-failed { background: var(--st-failed); color: #fff; }
+.badge-canceled { background: var(--muted-bg); color: var(--muted-ink); }
+
+/* Lampu rekam: kotak merah berkedip keras (steps, bukan fade) — menandai
+   klip yang sedang dirender. Satu-satunya gerak otomatis di aplikasi. */
+.tally {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  background: var(--rec);
+  border: var(--bw-thin) solid var(--ink);
+  animation: tally-blink 1s steps(2, end) infinite;
+  flex: none;
+}
+@keyframes tally-blink {
+  50% { background: var(--panel); }
+}
+
+/* Tag sumber (upload / youtube) */
+.tag {
+  display: inline-block;
+  border: var(--bw-thin) solid var(--ink);
+  padding: 0.1rem 0.45rem;
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tag-upload { background: var(--violet); }
+.tag-youtube { background: var(--pink); color: #fff; }
+
+/* Bar progres: blok padat bergaris, bukan gradasi. */
+.progress {
+  border: var(--bw-thin) solid var(--ink);
+  background: var(--paper);
+  height: 20px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  /* Garis diagonal agar terbaca sebagai "pita" brutalism. */
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--ink) 0 4px,
+    transparent 4px 10px
+  );
+  transition: width 200ms ease;
+}
+
+/* Input form: kotak tegas, tanpa radius. */
+.field { display: flex; flex-direction: column; gap: 0.25rem; }
+.input,
+.textarea,
+.select {
+  width: 100%;
+  border: var(--bw) solid var(--ink);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.7rem 0.85rem;
+  min-height: 44px;
+}
+.input::placeholder { color: #8a8175; font-weight: 700; }
+
+/* Pemilih jumlah klip: stepper (−, angka, +) + pilihan cepat. Satu baris di
+   layar lebar, bertumpuk di layar sempit. */
+.clip-picker { margin-bottom: 1rem; }
+.clip-picker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.clip-picker-total { font-size: 0.72rem; color: var(--muted-ink); }
+.clip-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.clip-stepper { display: flex; }
+.clip-stepper .btn { box-shadow: none; padding: 0.7rem 0.95rem; font-size: 1.1rem; }
+.clip-stepper .btn:hover { transform: none; }
+.clip-stepper .btn:hover:not(:disabled) { background: var(--accent); }
+.clip-stepper .input {
+  width: 4.5ch;
+  min-width: 4.5rem;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 900;
+  border-left: 0;
+  border-right: 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.clip-stepper .input::-webkit-outer-spin-button,
+.clip-stepper .input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.clip-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.clip-presets .btn { min-width: 44px; padding: 0.55rem 0.7rem; }
+.clip-picker-hint { font-size: 0.75rem; margin: 0.45rem 0 0; }
+
+/* Pesan error: wajib role="alert" di markup (panduan UX a11y). */
+.alert {
+  border: var(--bw) solid var(--ink);
+  background: var(--pink);
+  color: #fff;
+  padding: 0.7rem 0.9rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+}
+.alert-info { background: var(--blue); }
+.alert-warn { background: var(--accent); color: var(--ink); }
+.alert-ok { background: var(--toxic); color: var(--ink); }
+
+/* Skeleton loading — panduan UX menandai "Loading States" sebagai HIGH.
+   Shimmer dipisah agar bisa dimatikan via prefers-reduced-motion. */
+.skeleton {
+  background: var(--muted-bg);
+  border: var(--bw-thin) solid var(--ink);
+  animation: skeleton-pulse 1.2s steps(2, end) infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Tab: blok bergaris tegas; tab aktif kuning + shadow keras. */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tab {
+  border: var(--bw) solid var(--ink);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.6rem 1rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--accent); box-shadow: var(--shadow-sm); }
+
+/* --------------------------- Layout ------------------------------- */
+
+/* Wadah global: SATU lebar maksimum untuk seluruh aplikasi.
+   Header, main, dan footer semuanya memakai .shell agar tepi kiri/kanan
+   sejajar dari atas sampai bawah. */
+.shell {
+  width: 100%;
+  max-width: var(--shell-max);
+  margin: 0 auto;
+  padding: 0 var(--shell-pad);
+}
+
+/* Wadah halaman: SATU sumber kebenaran untuk lebar konten.
+   Semua halaman memakai .page + .page-head sehingga tepi kiri/kanan
+   teks sejajar konsisten. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-section);
+  width: 100%;
+  /* Batas baca: konten tidak boleh melebar melebihi ini walau layar besar. */
+  max-width: var(--page-max);
+  /* WAJIB: tanpa ini, di layar lebih lebar dari --page-max konten menempel
+     ke kiri sementara header (.shell) terpusat. */
+  margin: 0 auto;
+}
+
+/* Kepala halaman: label kecil + judul + slot aksi kanan. */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Baris dua kolom (konten utama + panel samping).
+   minmax(0, 1fr) memakai 0 sebagai batas bawah agar anak yang lebar
+   (tabel panjang, nama berkas panjang) tidak memaksa kolom melebar. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--aside-w);
+  gap: var(--gap-section);
+  align-items: start;
+  width: 100%;
+}
+
+/* Varian untuk studio: player 9:16 di kiri, menempel saat daftar klip
+   digulir supaya klip yang dipilih tetap terlihat. */
+.split-lead {
+  grid-template-columns: var(--aside-w) minmax(0, 1fr);
+}
+.split-lead > :first-child {
+  position: sticky;
+  top: 6rem;
+}
+
+@media (max-width: 900px) {
+  .split,
+  .split-lead { grid-template-columns: minmax(0, 1fr); }
+  .split-lead > :first-child { position: static; max-width: 360px; width: 100%; margin: 0 auto; }
+}
+
+.grid {
+  display: grid;
+  gap: var(--gap-grid);
+}
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+/* Tabel bergaris tegas — inti tampilan dashboard. */
+.table-brutal {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: var(--bw) solid var(--ink);
+}
+.table-brutal th {
+  background: var(--ink);
+  color: var(--paper);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  padding: 0.7rem 0.85rem;
+  border-right: var(--bw-thin) solid var(--ink);
+}
+.table-brutal td {
+  padding: 0.8rem 0.85rem;
+  border-top: var(--bw-thin) solid var(--ink);
+  border-right: var(--bw-thin) solid var(--ink);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+.table-brutal tbody tr { transition: background 100ms ease; }
+.table-brutal tbody tr:hover { background: #fff8d9; }
+
+/* ------------------ Aksesibilitas: reduced motion ------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .tally { animation: none; }
+  .panel-interactive,
+  .btn { transition: none; }
+  .panel-interactive:hover,
+  .btn:hover { transform: none; }
+}
+
+/* Layar sempit: tabel jadi kartu bertumpuk agar tidak perlu scroll
+   horizontal. Breakpoint 768px sesuai checklist skill. */
+@media (max-width: 768px) {
+  .table-brutal thead { display: none; }
+  .table-brutal,
+  .table-brutal tbody,
+  .table-brutal tr,
+  .table-brutal td { display: block; width: 100%; }
+  .table-brutal tr {
+    border-top: var(--bw) solid var(--ink);
+    padding: 0.25rem 0;
+  }
+  .table-brutal td {
+    border: none;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .table-brutal td::before {
+    content: attr(data-label);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 900;
+    color: var(--muted-ink);
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Animasi pratinjau caption
+   ---------------------------------------------------------------------------
+   Ini HANYA untuk pratinjau di browser. Animasi yang benar-benar ter-bakar ke
+   video dihasilkan oleh libass dari tag \t() di berkas ASS (lihat
+   clipper_shared.subtitles.ass). Keduanya sengaja tidak berbagi kode karena
+   bahasa dan mesin waktunya berbeda; yang dijaga adalah KESAN geraknya serupa,
+   bukan implementasinya identik.
+--------------------------------------------------------------------------- */
+
+/* Muncul dari tembus menjadi pekat. */
+@keyframes captionFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Mulai sedikit lebih besar lalu mengendur ke ukuran normal — kesan "memantul"
+   yang dipakai gaya caption viral. */
+@keyframes captionPopIn {
+  from { opacity: 0.2; transform: scale(1.25); }
+  to   { opacity: 1;   transform: scale(1); }
+}
+
+.caption-anim-fade {
+  animation: captionFadeIn 220ms ease-out;
+}
+
+.caption-anim-pop {
+  animation: captionPopIn 220ms cubic-bezier(0.22, 1.4, 0.36, 1);
+  transform-origin: center bottom;
+}
+
+/* Hormati preferensi sistem: animasi berulang dapat mengganggu pengguna dengan
+   sensitivitas gerak. */
+@media (prefers-reduced-motion: reduce) {
+  .caption-anim-fade,
+  .caption-anim-pop {
+    animation: none;
+  }
+}

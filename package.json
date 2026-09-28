@@ -1,0 +1,22 @@
+{
+  "name": "clipper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ClipperAI — monorepo root. Sisi Python dikelola pyproject.toml (bukan npm).",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev --workspace @clipper/web",
+    "build": "npm run build --workspace @clipper/web",
+    "start": "npm run start --workspace @clipper/web",
+    "lint": "npm run lint --workspace @clipper/web",
+    "typecheck": "npm run typecheck --workspace @clipper/web",
+    "test": "npm run test --workspaces --if-present",
+    "test:web": "npm run test --workspace @clipper/web"
+  }
+}

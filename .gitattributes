@@ -1,0 +1,21 @@
+# Skrip shell WAJIB memakai LF, termasuk saat di-checkout di Windows.
+#
+# Bug yang pernah terjadi: `scripts/run_worker_wsl.sh` ditulis dengan akhiran
+# baris CRLF dari Windows, dan bash di WSL gagal dengan pesan yang membingungkan
+# — `$'\r': command not found` dan `set: pipefail: invalid option name`. Skrip
+# tampak benar saat dibaca, tetapi tidak dapat dijalankan sama sekali.
+*.sh text eol=lf
+
+# Berkas teks biasa: normalkan ke LF di repositori.
+*.py  text eol=lf
+*.ts  text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md  text eol=lf
+*.toml text eol=lf
+
+# Batch Windows WAJIB CRLF: cmd.exe salah mencari label `call :x` / `goto :x`
+# pada berkas LF bila label melewati batas blok 512 byte.
+*.cmd text eol=crlf

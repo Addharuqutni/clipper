@@ -1,0 +1,152 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clipper"
+version = "0.1.0"
+description = "ClipperAI — long-form video to 9:16 vertical clips (aplikasi lokal Windows)"
+readme = "README.md"
+# Semua dependensi (mediapipe, ctranslate2, opencv) menyediakan wheel win_amd64
+# untuk 3.12–3.14.
+requires-python = ">=3.12,<3.15"
+license = { text = "Proprietary" }
+authors = [{ name = "ClipperAI" }]
+
+dependencies = [
+    "pydantic>=2.8,<3",
+    "pydantic-settings>=2.7,<3",
+    # AES-256-GCM untuk kunci API penyedia AI dan cookies YouTube.
+    "cryptography>=43.0",
+]
+
+[project.optional-dependencies]
+# Satu proses menjalankan API dan seluruh pipeline (worker = thread pool).
+app = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "sqlalchemy[asyncio]>=2.0.32,<3",
+    "aiosqlite>=0.20",
+    "greenlet>=3.0",
+    "python-multipart>=0.0.9",
+    "sse-starlette>=2.1",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    # Membaca nama keluarga font kustom (tanpa ini jatuh ke nama berkas).
+    "fonttools>=4.50",
+    "faster-whisper>=1.0.3,<2",
+    # `[default]` membawa yt-dlp-ejs: skrip pemecah tantangan JavaScript YouTube.
+    "yt-dlp[default]>=2024.8.6",
+    "opencv-python-headless>=4.10,<6",
+    "mediapipe>=0.10.14,<0.11",
+    # numpy>=2: tidak ada wheel cp314 untuk 1.26.x.
+    "numpy>=2,<3",
+]
+
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+all = ["clipper[app]", "clipper[dev]"]
+
+[tool.hatch.build.targets.wheel]
+# Monorepo: hanya packages/shared yang distribusikan sebagai paket impor.
+# apps/api/app dan apps/worker-*/app di-import lewat PYTHONPATH per-container.
+packages = ["packages/shared/src/clipper_shared"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# `.venv`/`node_modules` selalu dilewati.
+extend-exclude = [".venv", ".venv-win", "node_modules", ".next"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "ASYNC", "S"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests boleh pakai assert dan string "lemah"; itu memang tujuannya.
+"**/tests/**" = ["S101", "S105", "S106"]
+# main.py harus menyiapkan sys.path (runner Standalone) sebelum import app.
+"apps/api/app/main.py" = ["E402"]
+# B008: FastAPI mewajibkan `Depends()`/`File()`/`Query()` dipanggil di posisi
+# default argumen — begitulah cara deklarasi dependensi & validasi bekerja.
+# Peringatan ini benar untuk kode Python umum, tetapi salah untuk router
+# FastAPI, jadi dibatasi hanya pada modul router.
+"**/api/v1/*.py" = ["B008"]
+# S310: `urlopen` pada URL subtitle sudah dijaga `_is_safe_subtitle_url()`
+# yang hanya mengizinkan http/https, dan pemeriksaan itu berada tepat sebelum
+# pemanggilan. Ruff tidak dapat melihat kaitan antar-baris itu.
+"**/worker_light/media_fetcher.py" = ["S310"]
+# S108: test memakai string "/tmp/..." sebagai contoh jalur POSIX untuk menguji
+# pelolosan jalur filter FFmpeg. Tidak ada berkas yang dibuat di sana.
+"**/tests/test_worker_render.py" = ["S108"]
+# S603: test ini menjalankan INTERPRETER SENDIRI dengan potongan kode literal
+# untuk membuktikan `clipper_shared.security` dapat diimpor hanya dengan jalur
+# worker. Argumennya dibangun internal, tidak ada masukan pengguna.
+# S108: lihat catatan `**/clipper_shared/workspace.py` di bawah.
+"**/tests/test_security_location.py" = ["S603", "S108"]
+# S108: `/var/tmp` DIPILIH SENGAJA, dan justru karena alasan keamanan operasional.
+# Di WSL (dan banyak container), `/tmp` adalah tmpfs yang ukurannya diambil dari
+# RAM — pada mesin pengembangan ini hanya 953 MB, sehingga video 32 menit
+# (~950 MB) gagal menulis dengan "No space left on device". `/var/tmp` berada di
+# disk nyata dan tidak dibersihkan sesering `/tmp`, sehingga pekerjaan panjang
+# tidak hilang di tengah jalan. Lokasinya tetap dapat ditimpa lewat
+# WORKER_WORKSPACE_DIR.
+"**/clipper_shared/workspace.py" = ["S108"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+exclude = ["build", "dist"]
+
+[[tool.mypy.overrides]]
+# Deps tanpa stub resmi.
+module = ["faster_whisper.*", "yt_dlp.*", "mediapipe.*", "sse_starlette.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = [
+    "apps/api/tests",
+    "apps/worker-light/tests",
+    "apps/worker-render/tests",
+    "packages/shared/tests",
+]
+python_files = ["test_*.py"]
+# Suite saat ini TIDAK punya test `async def` (semua sinkron). asyncio_mode tetap
+# di-set agar test async di masa depan langsung bekerja tanpa konfigurasi ulang.
+# Ini membutuhkan pytest-asyncio di grup `dev`; bila plugin itu absen, pytest
+# memunculkan PytestConfigWarning — peringatan itu berarti konfigurasi ini mati,
+# jadi jangan diamkan.
+asyncio_mode = "auto"
+# PYTHONPATH dipasang di sini supaya `pytest` dari root repo menemukan `app.*`
+# (apps/api), `worker_light.*`, `worker_render.*`, DAN `clipper_shared.*`.
+pythonpath = [
+    "apps/api",
+    "apps/worker-light",
+    "apps/worker-render",
+    "packages/shared/src",
+]
+# CATATAN: direktori test SENGAJA tanpa __init__.py. Bila ada, pytest
+# menggabungkannya menjadi satu paket bernama `tests` dan koleksi gagal dengan
+# ModuleNotFoundError. Karena itu pula setiap nama berkas test harus UNIK di
+# seluruh repo — dua `test_pipeline.py` di direktori berbeda bertabrakan dan
+# menghasilkan error "import file mismatch".
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    # Dikeluarkan oleh FastAPI/Starlette sendiri (bukan kode kita): TestClient
+    # masih memakai httpx 0.x. Sengaja di-ignore secara SEMPIT (by message) agar
+    # deprecation baru dari kode kita sendiri tetap terlihat.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning",
+]

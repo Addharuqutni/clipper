@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+# Virtualenv Windows (dibuat oleh alur instalasi di README).
+.venv-win/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.log
+# Artefak build TypeScript / Vite / cakupan test.
+*.tsbuildinfo
+coverage/
+# Env & secrets
+.env
+.env*.local
+# Cadangan .env (.env.*) — memuat kunci enkripsi, jangan di-commit.
+.env.*
+!.env.example
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Build / data lokal
+*.sqlite
+*.db
+uploads/
+renders/
+# Cache model Whisper dan model MediaPipe.
+#
+# CATATAN: pola `models/` saja TIDAK menangkap `.models/` — Git memperlakukan
+# titik di awal sebagai bagian nama, bukan sebagai penanda tersembunyi. Karena
+# proyek memakai nama berawalan titik, setiap direktori besar perlu pola
+# eksplisitnya sendiri. Tanpa ini, `git add .` akan menyertakan ~1 GB berkas
+# binary (FFmpeg 494 MB + cache model Whisper ~460 MB).
+.models/
+.models
+# FFmpeg lokal (ffmpeg.exe + ffprobe.exe, ratusan MB).
+.libs/
+# Media mentah dan workspace per-job.
+.local-storage/
+.work/
+# Klip hasil render yang dikumpulkan untuk dilihat manusia.
+# Berisi binary besar hasil turunan — jangan pernah masuk repo.
+output/
+# Tooling lokal
+.omp/
+
