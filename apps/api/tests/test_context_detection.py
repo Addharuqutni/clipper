@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.api.v1.ai import context_tokens_from_models
+from app.services.ai_settings import context_tokens_from_models
 
 
 def test_membaca_field_konteks_yang_lazim() -> None:

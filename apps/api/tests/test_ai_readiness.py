@@ -23,8 +23,10 @@ _ENV_FALLBACK = (
 
 
 def test_job_ditolak_sebelum_dibuat_bila_ai_belum_siap(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.api.v1 import ai
+    # `_load_settings` kini tinggal di service (lapisan non-HTTP); route hanya
+    # memanggilnya lewat `ai_settings`.
     from app.core import dispatch
+    from app.services import ai_settings
 
     for name in _ENV_FALLBACK:
         monkeypatch.delenv(name, raising=False)
@@ -32,7 +34,7 @@ def test_job_ditolak_sebelum_dibuat_bila_ai_belum_siap(monkeypatch: pytest.Monke
     async def no_saved_settings(*_args: object) -> None:
         return None
 
-    monkeypatch.setattr(ai, "_load_settings", no_saved_settings)
+    monkeypatch.setattr(ai_settings, "load_settings", no_saved_settings)
 
     dispatched: list[object] = []
     monkeypatch.setattr(dispatch, "dispatch_ingest", lambda *args, **_kw: dispatched.append(args))

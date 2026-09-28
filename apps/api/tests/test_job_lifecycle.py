@@ -27,12 +27,12 @@ def submitted(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, ...]]:
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch, submitted: list[tuple[Any, ...]]) -> Iterator[TestClient]:
-    from app.api.v1 import jobs
+    from app.services import jobs as jobs_service
 
     async def ai_ready(*_args: object) -> None:
         return None
 
-    monkeypatch.setattr(jobs, "ai_config_problem", ai_ready)
+    monkeypatch.setattr(jobs_service, "ai_config_problem", ai_ready)
     with TestClient(create_app()) as test_client:
         yield test_client
 
@@ -100,13 +100,13 @@ def test_unggahan_resume_lalu_complete_memulai_ingest(client: TestClient, submit
 
 
 def test_job_berjalan_ditandai_gagal_saat_startup_dan_bisa_diulang(submitted: list[tuple[Any, ...]], monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.api.v1 import jobs
+    from app.services import jobs as jobs_service
     from clipper_shared.db import get_db_connection
 
     async def ai_ready(*_args: object) -> None:
         return None
 
-    monkeypatch.setattr(jobs, "ai_config_problem", ai_ready)
+    monkeypatch.setattr(jobs_service, "ai_config_problem", ai_ready)
     with TestClient(create_app()) as client:
         job_id = client.post(
             "/api/v1/jobs", json={"source_type": "youtube", "source_url": "https://youtu.be/dQw4w9WgXcQ"}

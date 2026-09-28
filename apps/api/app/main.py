@@ -26,14 +26,16 @@ for _pkg in (
     if str(_pkg) not in sys.path and _pkg.is_dir():
         sys.path.insert(0, str(_pkg))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import __version__
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.session import check_database, dispose_engine, init_db_schema
+from app.services.errors import ServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+
+    @application.exception_handler(ServiceError)
+    async def _service_error_handler(_request: Request, exc: ServiceError) -> JSONResponse:
+        """Kesalahan domain service → respons HTTP yang sama dengan sebelumnya.
+
+        Service tidak mengimpor FastAPI; satu handler ini menjaga kode status
+        dan bentuk badan respons identik dengan saat aturan berada di route.
+        """
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     application.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
