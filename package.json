@@ -9,6 +9,11 @@
   "workspaces": [
     "apps/web"
   ],
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.28"
+    }
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "npm run dev --workspace @clipper/web",
