@@ -10,8 +10,9 @@ masih melihat formulirnya.
 **Endpoint uji menerima API key dan meneruskannya ke penyedia.** Key tidak
 pernah dicatat ke log, tidak disimpan, dan tidak dikembalikan dalam respons.
 
-Logika non-HTTP — akses basis data, dekripsi kunci, deteksi konteks, dan
-pemanggilan penyedia — tinggal di :mod:`app.services.ai_settings`.
+Logika non-HTTP — akses basis data, dekripsi kunci, dan deteksi konteks —
+tinggal di :mod:`app.services.ai_settings`; pemanggilan pengujian koneksi
+tinggal di :mod:`app.services.provider_probe`.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from app.api.v1.auth import CurrentUserOrDev, DbSession
-from app.services import ai_settings
+from app.services import ai_settings, provider_probe
 
 router = APIRouter()
 
@@ -212,7 +213,7 @@ async def test_provider(
     """Kirim satu permintaan kecil untuk memastikan konfigurasi bekerja.
 
     Kunci tersimpan dipakai bila field kunci kosong (lihat
-    :func:`app.services.ai_settings.resolve_probe_config`), dengan dua pengecualian
+    :func:`app.services.provider_probe.resolve_probe_config`), dengan dua pengecualian
     penting yang menjaga guard ``requires_api_key`` tetap bekerja dan menjawab
     400 (bukan 401 dari penyedia):
 
@@ -227,7 +228,7 @@ async def test_provider(
     Raises:
         HTTPException: 400 bila konfigurasi tidak sah.
     """
-    config = await ai_settings.resolve_probe_config(
+    config = await provider_probe.resolve_probe_config(
         db,
         current_user.id,
         preset=payload.preset,
@@ -236,5 +237,5 @@ async def test_provider(
         api_key=payload.api_key,
         allow_private_host=payload.allow_private_host,
     )
-    result: dict[str, Any] = await ai_settings.probe_provider(config)
+    result: dict[str, Any] = await provider_probe.probe_provider(config)
     return ProviderTestResponse(**result)
