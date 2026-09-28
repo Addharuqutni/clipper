@@ -25,10 +25,51 @@ Sumber: PRD §1.3; TECH_SPEC §0.1.
   MediaPipe tidak punya active-speaker detection (lihat `technical-debt.md`),
   jadi angka 85% adalah target, bukan hasil. Sprint 3 butir 31 secara eksplisit
   meminta kalibrasi dan pelaporan presisi aktual sebelum mengklaim.
+  **Alat ukurnya sudah ada** (lihat §1.1): `scripts/eval_reframe.py` +
+  dataset `eval/reframe/`. Yang belum ada hanyalah **20 klip berlabelnya** —
+  sampai itu terisi, statusnya tetap BELUM DITENTUKAN.
 - **Export & Publish Rate** — kini murni Export Rate: publishing dihapus (D5),
   jadi pengukuran bergantung pada unduhan.
 
 Sumber: PRD §1.3; TECH_SPEC §0.1, §5.2, §6 Sprint 3 butir 31.
+
+---
+
+## 1.1 Cara Mengukur Presisi Reframing (harness)
+
+Alat ukur sudah tersedia; yang belum ada adalah **datanya** (20 klip berlabel).
+
+| Bagian | Lokasi |
+|---|---|
+| Dataset + tata cara melabeli | `eval/reframe/README.md` (Indonesia) |
+| Label klip | `eval/reframe/labels.json` (ikut di-commit; media di `eval/reframe/clips/` di-gitignore) |
+| Skrip pengukur | `scripts/eval_reframe.py` |
+| Uji logika penilaian | `apps/worker-render/tests/test_reframe_eval.py` |
+| Fungsi murni HIT/MISS + agregasi | `apps/worker-render/worker_render/reframe_eval.py` |
+
+Perintah (dari akar repo):
+
+```cmd
+.venv-win\Scripts\python.exe scripts\eval_reframe.py
+.venv-win\Scripts\python.exe scripts\eval_reframe.py --json
+```
+
+Skrip memanggil `worker_render.reframer.compute_crop_positions` — fungsi yang
+sama dengan render sungguhan — tetapi berhenti sebelum encode, jadi tidak ada
+video yang ditulis. Definisi metrikl: satu **HIT** bila titik tengah wajah yang
+dilabeli berada di dalam jendela crop 9:16 pada frame tersebut (batas tepi
+dihitung HIT); **presisi** = total HIT / total keyframe, diagregasi lintas klip.
+Dilaporkan juga HIT bermargin (bawaan: wajah di dalam **80% tengah** crop).
+Kode keluar 0 selalu kecuali error nyata.
+
+**Gerbang klaim.** Bila klip berlabel < 20, skrip mencetak peringatan besar
+**"BELUM BOLEH DIKLAIM"** (TECH_SPEC §5.2). Sebelum 20 klip terlabeli dan
+diukur, baris Reframing Accuracy di atas **tetap BELUM DITENTUKAN** dan angka
+85% tidak boleh dikutip sebagai hasil — baik di UI, dokumentasi, maupun laporan.
+Setelah pengukuran, hasilnya dicatat di §5 dokumen ini beserta tanggal, jumlah
+klip/keyframe, dan commit yang diukur.
+
+Sumber: PRD §1.3; TECH_SPEC §5.2, §6 Sprint 3 butir 31; `docs/memory/technical-debt.md` §3.
 
 ---
 
@@ -63,7 +104,7 @@ Sumber: TECH_SPEC §0.1, §2.
 | Perencanaan kapasitas `RENDER_SLOTS`/`STT_SLOTS` | Tabel §2 di atas + kapasitas host lokal (`constraints.md` §6; BELUM DITENTUKAN) |
 | Validasi akhir | Sprint 5 butir 42: **laporkan time-to-first-clip aktual** memakai kerangka §0.1 |
 | Penetapan default model | `small` int8 |
-| Presisi reframing | Diukur di Sprint 3 butir 31 pada set uji 20 klip berlabel |
+| Presisi reframing | Diukur di Sprint 3 butir 31 pada set uji 20 klip berlabel — harness: `scripts/eval_reframe.py` (§1.1) |
 
 Sprint 5 butir 38 juga mewajibkan pengukuran **p95** dan **biaya per video**
 melalui stress test (20 upload paralel @ 2 GB, 10 job render bersamaan).
@@ -87,7 +128,11 @@ Sumber: TECH_SPEC §7, §6 Sprint 5 butir 42.
 - **BELUM DITENTUKAN** — Nilai `time-to-first-clip` aktual di host ini
   (baru akan diukur Sprint 5 butir 42; angka 25 menit adalah **target**, bukan hasil).
 - **BELUM DITENTUKAN** — Presisi reframing aktual (target ≥ 85%; hasil kalibrasi
-  Sprint 3 butir 31 belum ada).
+  Sprint 3 butir 31 belum ada). **Alat ukur sudah siap** (§1.1:
+  `scripts/eval_reframe.py` + `eval/reframe/`); yang belum ada adalah **20 klip
+  berlabel** yang harus diisi pemilik produk. Sampai itu terjadi, angka apa pun
+  dari skrip tersebut **belum boleh diklaim** (peringatan itu dicetak skripnya
+  sendiri).
 - **BELUM DITENTUKAN** — Kapasitas final host → semua angka tabel §2 bersifat
   indikatif sampai `RENDER_SLOTS`/`STT_SLOTS` diukur (`constraints.md` §6).
 - **BELUM DITENTUKAN** — Biaya per video (target pengukuran Sprint 5 butir 38).

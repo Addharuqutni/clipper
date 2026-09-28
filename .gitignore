@@ -50,6 +50,16 @@ renders/
 # Klip hasil render yang dikumpulkan untuk dilihat manusia.
 # Berisi binary besar hasil turunan — jangan pernah masuk repo.
 output/
+# Dataset pengukuran presisi reframing (docs/memory/metrics.md §1, tech-debt §3).
+# `labels.json` SENGAJA ikut di-commit: kecil, dan itulah bukti angka yang
+# dilaporkan. Media klipnya TIDAK — ratusan MB per berkas.
+eval/reframe/clips/
+eval/reframe/**/*.mp4
+eval/reframe/**/*.mkv
+eval/reframe/**/*.mov
+eval/reframe/**/*.webm
+eval/reframe/**/*.m4a
+eval/reframe/**/*.wav
 # Tooling lokal
 .omp/
 
