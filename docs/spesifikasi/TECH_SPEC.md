@@ -4,7 +4,7 @@
 **Derived from:** [`PRD.md`](PRD.md) v1.0.0 (MVP)
 **Status:** Frozen for execution (no code scaffolded yet)
 
-> **Catatan 2026-09-27:** bagian deployment (3 container, Celery/Redis, PostgreSQL, R2 presigned upload, auth) digantikan keputusan T9 — aplikasi lokal satu proses. Lihat [memory/decisions.md](../memory/decisions.md#t9--lokal-saja-docker-dan-mode-distributed-dihapus).
+> **Catatan 2026-09-27 (T9):** dokumen ini adalah **spesifikasi historis**. Semua bagian **deployment** (3 container, Docker/VPS, Dokploy/Traefik, Celery/Redis, PostgreSQL, R2 presigned upload, auth) **superseded oleh keputusan T9**: aplikasi berjalan **lokal saja** (satu proses, SQLite + disk). Bagian tersebut dipertahankan sebagai riwayat dan **bukan instruksi**. Kebenaran operasional ada di [`../memory/constraints.md`](../memory/constraints.md); detail keputusan di [`../memory/decisions.md`](../memory/decisions.md#t9--lokal-saja-docker-dan-mode-distributed-dihapus).
 **Date:** 2026-09-20
 
 ---
@@ -17,7 +17,7 @@ Empat keputusan pengguna yang mengikat seluruh dokumen ini:
 |---|---|---|
 | D1 | **STT self-host, CPU-only** (`faster-whisper`) | OKR "30 menit → ≤5 menit" **TIDAK TERCAPAI**. Metrik diganti (lihat §0.1). |
 | D2 | ~~Publishing ditunda~~ — **digantikan D5 (2026-09-26): publishing dihapus**, produk download-only | Tidak ada OAuth/posting ke platform sosial. Lihat [`../memory/decisions.md`](../memory/decisions.md) D5. |
-| D3 | **VPS self-managed** (Hetzner + Dokploy) | Tidak ada auto-scale platform. Wajib admission control + QoS CPU + backup teruji. |
+| D3 | ~~**VPS self-managed** (Hetzner + Dokploy)~~ — **superseded oleh T9**: lokal saja, tanpa Docker/deployment | Tidak ada auto-scale platform. Wajib admission control + QoS CPU + backup teruji. |
 | D4 | **Hanya dokumen**, tanpa scaffold kode | Dokumen ini adalah deliverable. Baris "Scaffold" di Sprint 0 adalah tugas, bukan pekerjaan yang sudah dilakukan. |
 
 ### 0.1 Koreksi Target Metrik (menggantikan PRD §1.3)
@@ -37,7 +37,7 @@ Empat keputusan pengguna yang mengikat seluruh dokumen ini:
 
 ClipperAI dirancang dengan arsitektur **Dual-Mode** yang fleksibel:
 
-### Mode 1: Terdistribusi / Multi-Container (Produksi / VPS / Docker)
+### Mode 1: Terdistribusi / Multi-Container (Produksi / VPS / Docker) — **DIHAPUS oleh T9 (riwayat)**
 
 ```
 ┌────────────────────────┐
@@ -116,12 +116,11 @@ Kondisi host Windows saat ini:
 - Node.js 24 LTS untuk frontend Next.js 15.
 
 **Jalur eksekusi yang didukung:**
-1. **Windows Native Standalone (Paling Cepat & Praktis):**
+1. **Windows Native Standalone (satu-satunya jalur sejak T9):**
    Cukup jalankan `npm run dev` (atau klik dua kali `start.cmd`). Semua layanan berjalan di satu terminal dan lokal SELALU Standalone (SQLite, tanpa PostgreSQL/Redis).
-2. **Docker Compose / VPS (Produksi):**
-   Menjalankan container multi-service (`postgres`, `redis`, `api`, `worker-light`, `worker-render`) sesuai arsitektur VPS. Tidak dipakai untuk development lokal.
+2. ~~**Docker Compose / VPS (Produksi)**~~ — **superseded oleh T9**: tidak ada container, PostgreSQL, Redis, maupun deployment server.
 
-**Aturan pin versi (berlaku di image container produksi):**
+**Aturan pin versi (historis — tidak ada image container produksi sejak T9):**
 
 ```
 Python   : 3.12.x  (base image python:3.12-slim-bookworm)
@@ -142,27 +141,27 @@ Cek cepat sebelum mulai: `ffmpeg -version | grep -E 'libx264|libass'` (atau Powe
 | **Frontend** | Next.js 15 (App Router, TS), Tailwind CSS v4, shadcn/ui, TanStack Query, Zustand | SSR untuk halaman marketing/SEO; uploader wajib client-side |
 | **Upload** | `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` (browser), `react-dropzone`, IndexedDB untuk state resume | Multipart 10 MB/part, resume via `ListParts`, retry eksponensial |
 | **API** | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Alembic, `sse-starlette` | Stateless; tidak pernah menyentuh FFmpeg |
-| **Queue** | Celery 5 + Redis 7 (broker terdistribusi) / In-Process ThreadPool (Standalone) | Queue: `ingest`, `transcribe`, `analyze`, `render`; fallback runner internal bila Standalone |
-| **DB** | PostgreSQL 16 + `pgvector` (terdistribusi) / SQLite via `aiosqlite` (Standalone) | Metadata, transkrip JSONB, token terenkripsi |
-| **Storage** | Cloudflare R2 (S3-compatible) / Local filesystem (`output/`) | Egress gratis di cloud; direktori lokal `output/` saat dev/standalone |
+| **Queue** | In-Process ThreadPool per tahap (Standalone) — ~~Celery 5 + Redis 7~~ (superseded T9) | Tahap: `ingest`, `transcribe`, `analyze`, `render`; ukuran pool = batas paralel |
+| **DB** | SQLite via `aiosqlite` (Standalone) — ~~PostgreSQL 16 + pgvector~~ (superseded T9) | Metadata, transkrip JSONB, token terenkripsi |
+| **Storage** | Local filesystem (`output/`) — ~~Cloudflare R2~~ (superseded T9) | Raw, render, overlay, font; klip final di `output/clips/` |
 | **STT** | `faster-whisper` (CTranslate2, int8), default `small` | Dijalankan di `worker-light`; model di-cache di volume persisten |
 | **Diarization** | ❌ **DITUNDA** (lihat §5.3) | `pyannote` terlalu berat di CPU. Diganti heuristik energi + gap |
 | **LLM Scoring** | Gemini 2.5 Flash (default), fallback Claude Haiku; structured JSON output | Prompt + skema Pydantic ketat; **parsing toleran-kerusakan, temperature berbasis niat, pertahanan prompt injection, dan permintaan berlebih `num_clips + 3`** — lihat §5.4 |
 | **Video** | FFmpeg 7 (`libx264`, `libass`), OpenCV, MediaPipe **Face Landmarker** (`mediapipe.tasks`, bukan legacy `solutions`), PySceneDetect | Reframing: landmark bibir → skor pembicara aktif (§5.2). Subtitle: **ASS satu-event-per-kata** dengan override warna inline, bukan tag `\k` (§5.2.1). `boxmot`/ByteTrack **dibatalkan** |
 | **Publishing** | ❌ Dihapus (D5). Pengguna mengunduh MP4 lalu mengunggah manual | — |
 | **YouTube** | `yt-dlp` (maksimum resolusi download 1080p) + PO token provider | Batas download 1080p (`bv*[height<=1080]+ba`) menjaga efisiensi CPU; risiko IP block = risiko #3 di PRD |
-| **Infra** | Hetzner CCX (dedicated vCPU) + Dokploy + Traefik; GitHub Actions; Sentry | `cpu.max` cgroup per container; lihat §4 |
-| **Backup** | `pg_dump` harian → R2 + restore drill terjadwal | VPS tanpa backup teruji = satu disk gagal, semua hilang |
+| **Infra** | ~~Hetzner CCX + Dokploy + Traefik; `cpu.max` cgroup~~ (superseded T9) + GitHub Actions | Aplikasi lokal satu proses; CI menjalankan test/lint |
+| **Backup** | ~~`pg_dump` harian → R2 + restore drill~~ (superseded T9) | Skema backup lokal `output/` BELUM DITENTUKAN |
 
 **Catatan pemilihan yang sengaja menyimpang dari PRD §6:**
 
 - PRD menawarkan "FastAPI **atau** Node.js". Dipilih **FastAPI saja** untuk backend — pipeline AI seluruhnya Python, memakai Node hanya akan menambah hop tanpa manfaat.
-- PRD menawarkan "Celery / BullMQ". Dipilih **Celery** — worker berat adalah FFmpeg + model ML Python native; BullMQ memaksa Node worker yang harus shell-out ke Python.
+- PRD menawarkan "Celery / BullMQ". ~~Dipilih **Celery**~~ — superseded T9: worker berat berjalan sebagai **thread pool in-process** per tahap (`clipper_shared.dispatcher`), tanpa broker.
 - Reframing tidak memakai "MediaPipe" secara polos: MediaPipe **tidak punya** active-speaker detection (lihat §5.2).
 
 ---
 
-## 3. Skema Database (Alembic, Sprint 0)
+## 3. Skema Database (Alembic, Sprint 0 — ~~Alembic~~ dihapus oleh T9; skema dikelola saat startup)
 
 ```
 users               (id, email, hashed_password, plan, created_at)
@@ -190,14 +189,18 @@ Rahasia pihak ketiga (kini: API key penyedia AI di `ai_provider_settings`) disim
 
 **Indeks wajib:** `jobs(user_id, created_at DESC)`, `segments(job_id, score DESC)`, `job_events(job_id, created_at)`.
 
-**Lifecycle R2 (PRD §5):**
+**Lifecycle R2 (PRD §5) — ~~R2~~ superseded T9, retensi tetap berlaku di disk lokal:**
 - Raw media: hapus 48 jam setelah render terakhir job selesai.
 - Klip final: pindah ke kelas arsip setelah 14 hari.
-- **Catatan penting:** lifecycle rule R2 berbasis prefix + umur objek, sedangkan PRD meminta "48 jam setelah proses pemotongan selesai" — ini bergantung kejadian, bukan umur objek. Implementasinya: **Celery beat `maintenance` task** yang menghapus berdasarkan `source_media.expires_at` di DB, bukan mengandalkan lifecycle rule saja. Lifecycle rule hanya jaring pengaman (mis. hapus paksa di 7 hari).
+- **Catatan penting:** lifecycle rule berbasis prefix + umur objek, sedangkan PRD meminta "48 jam setelah proses pemotongan selesai" — ini bergantung kejadian, bukan umur objek. Implementasinya sejak T9: **`clipper_shared.maintenance.purge_expired_raw_media`** (in-process, dijadwalkan API tiap jam) yang menghapus berdasarkan `source_media.expires_at` di DB.
 
 ---
 
-## 4. Strategi VPS & QoS (konsekuensi langsung D3)
+## 4. Strategi VPS & QoS (konsekuensi langsung D3) — **DIHAPUS oleh T9 (riwayat)**
+
+> Sejak T9 tidak ada VPS, container, maupun `cpu.max`. Padanan lokalnya:
+> ukuran pool `RENDER_SLOTS`/`STT_SLOTS` di `clipper_shared.dispatcher`
+> (lihat [`../memory/constraints.md`](../memory/constraints.md) §6).
 
 Bagian yang paling sering diabaikan dan paling menentukan stabilitas sistem.
 
@@ -214,16 +217,17 @@ Spesifikasi VPS belum dikonfirmasi. Tabel sizing berikut sebagai kerangka keputu
 
 **vCPU dedicated (CCX) wajib**, bukan shared (CX): FFmpeg pada shared vCPU menghasilkan waktu render yang tak terprediksi, dan itu membuat estimasi "time-to-first-clip" tidak bermakna.
 
-### 4.2 Admission Control
+### 4.2 Admission Control — setara lokal: ukuran pool `clipper_shared.dispatcher`
 
-Redis semaphore sebelum task render dieksekusi:
+~~Redis semaphore sebelum task render dieksekusi~~ (superseded T9):
 
 ```
-RENDER_SLOTS=1        # render paralel; naikkan hanya bila vCPU >= 8
+RENDER_SLOTS=1        # pool render paralel; naikkan hanya bila kapasitas terukur
 STT_SLOTS=1
 ```
 
-Task harus **gagal-cepat dengan `Retry`** bila slot tidak tersedia — jangan menunggu di dalam FFmpeg. Menunggu di dalam proses berarti worker idle memegang memori model tanpa berguna.
+Sejak T9 tidak ada `Retry`/semaphore: pekerjaan yang belum dapat giliran cukup
+menunggu di antrean `ThreadPoolExecutor` milik pool-nya.
 
 ### 4.3 Isolasi CPU
 
@@ -379,34 +383,34 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 ### Sprint 0 — Fondasi & Prasyarat (3–4 hari)
 
 1. Repo monorepo: `apps/web`, `apps/api`, `apps/worker-light`, `apps/worker-render`, `packages/shared`.
-2. `docker-compose.yml` dev: Postgres 16, Redis 7.2, MinIO (emulasi R2), tiga container app. Pin Python 3.12 + FFmpeg 7 dengan libx264 **dan** libass.
+2. ~~`docker-compose.yml` dev: Postgres 16, Redis 7.2, MinIO (emulasi R2), tiga container app. Pin Python 3.12 + FFmpeg 7.~~ — **dibatalkan T9**: jalur lokal langsung di Windows (`.venv-win`, FFmpeg BtbN di `.libs/ffmpeg/`).
 3. ~~Set up WSL2 Ubuntu sebagai jalur dev resmi~~ — digantikan keputusan T8 ([`../memory/decisions.md`](../memory/decisions.md)): development lokal = Windows Standalone (`npm run dev`), tanpa WSL/Postgres/Redis.
-4. Alembic: seluruh skema §3 (tabel `social_accounts`/`scheduled_posts` ada tetapi tidak dipakai sejak D5).
-5. Auth: email/password + JWT; middleware otorisasi job-by-owner.
-6. CI: Ruff, mypy, ESLint, `tsc --noEmit`; skeleton pytest + vitest.
+4. ~~Alembic: seluruh skema §3~~ — dibatalkan T9; skema dibuat/diselaraskan saat startup (`apps/api/app/db/session.py`); tabel `social_accounts`/`scheduled_posts` ada tetapi tidak dipakai sejak D5.
+5. Auth: email/password + JWT; middleware otorisasi job-by-owner. *(Historis — satu pengguna lokal tanpa login sejak T9.)*
+6. CI: Ruff, mypy, ESLint, `tsc --noEmit`; skeleton pytest + vitest. *(Wujud final: `.github/workflows/ci.yml`, termasuk job Python 3.12 sebagai bukti kompatibilitas.)*
 7. Sentry + structured logging (request id, job id) di API dan worker.
 8. ~~Daftarkan aplikasi developer TikTok & Meta~~ — dibatalkan oleh D5 (publishing dihapus).
-9. Setup Dokploy + Traefik di VPS, termasuk `cpu.max` per container dan volume cache model.
+9. ~~Setup Dokploy + Traefik di VPS, termasuk `cpu.max` per container dan volume cache model.~~ — **dibatalkan T9**.
 
-**Definition of Done:** `docker compose up` bersih dari error, migrasi jalan, endpoint `/health` hijau, CI lulus, WSL2 terverifikasi bisa menjalankan FFmpeg dengan libass.
+**Definition of Done (history):** ~~`docker compose up` bersih dari error, migrasi jalan, endpoint `/health` hijau, CI lulus, WSL2 terverifikasi bisa menjalankan FFmpeg dengan libass.~~ Digantikan T9: aplikasi lokal jalan lewat `npm run dev`, `/health` hijau, CI lulus.
 
 ### Sprint 1 — Ingestion (FR-1.1, FR-1.2) (4–5 hari)
 
-10. API: `POST /uploads/init` → presigned multipart (10 MB/part); `GET /uploads/:id/parts` untuk resume; `POST /uploads/complete`; `DELETE` untuk abort.
+10. API: ~~`POST /uploads/init` → presigned multipart~~ — sejak T9: `POST /uploads/init` → endpoint lokal per potongan (10 MB/part); `GET /uploads/:id/parts` untuk resume; `POST /uploads/complete`; `DELETE` untuk abort.
 11. UI: drag-and-drop + progress real-time + auto-retry/resume (IndexedDB menyimpan state `uploadId` + `partNumber`).
 12. Validasi berkas di worker (bukan di API): ekstensi, `ffprobe` (codec/durasi/dimensi), batas 3 GB.
 13. YouTube ingest: validasi URL (`watch?v=`, `youtu.be/`), metadata via `yt-dlp -J`, cek publik/unlisted + durasi ≤ batas model (konteks model AI ÷ 400 token/menit, maks `MAX_VIDEO_DURATION_MIN`, default 180 menit; semula 60 menit).
-14. `ingest` Celery task: resolve sumber → normalisasi (audio 16 kHz mono WAV untuk STT; mezzanine H.264/AAC) → unggah ke R2.
-15. Admission control §4.2 diimplementasikan untuk queue `render` dan `transcribe`.
-16. `maintenance` task berbasis `expires_at` untuk retensi raw 48 jam + lifecycle rule sebagai jaring pengaman (§3).
+14. `ingest` task (pool `ingest` sejak T9): resolve sumber → normalisasi (audio 16 kHz mono WAV untuk STT; mezzanine H.264/AAC) → simpan ke disk lokal.
+15. ~~Admission control §4.2~~ — padanan T9: ukuran pool `render`/`stt` di `clipper_shared.dispatcher`.
+16. `maintenance` berbasis `expires_at` untuk retensi raw 48 jam — sejak T9 in-process (`clipper_shared.maintenance`), bukan lifecycle rule R2.
 
 **DoD:** upload 2 GB bertahan setelah koneksi diputus di tengah dan dilanjutkan tanpa mengulang dari 0%; URL YouTube privat/durasi di atas batas ditolak dengan pesan jelas.
 
 ### Sprint 2 — Transkripsi & AI Scoring (FR-2.1, FR-2.2) (5–7 hari)
 
-17. Interface `Transcriber` (§5.1) + implementasi `FasterWhisperLocal` (`small`, int8). Model di-cache di volume persisten.
-18. `transcribe` task: ekstraksi audio → word-level timestamps → simpan JSON ke Postgres + R2.
-19. Benchmark nyata pada VPS: ukur waktu untuk audio 10/30 menit. **Angka ini yang menggantikan klaim OKR PRD** dan menjadi dasar estimasi "time-to-first-clip" di UI.
+17. Interface `Transcriber` (§5.1) + implementasi `FasterWhisperLocal` (`small`, int8). Model di-cache lokal (unduh sekali).
+18. `transcribe` task: ekstraksi audio → word-level timestamps → simpan JSON ke SQLite (sejak T9; ~~Postgres + R2~~).
+19. Benchmark nyata di host lokal: ukur waktu untuk audio 10/30 menit. **Angka ini yang menggantikan klaim OKR PRD** dan menjadi dasar estimasi "time-to-first-clip" di UI.
 20. Prompt Viral Scoring: input transkrip bertsempel waktu → JSON `{segments: [{start, end, score, label, hook_score, completeness, emotional_arc, reason}]}`.
 21. Validator + guardrail dasar: 30–60 s per segmen, non-overlap, 1–30 segmen dan maksimal 1 per 3 menit video (`max_clips_for_duration`; semula 1–10), snap ke batas kalimat.
 21a. **Pengerasan parsing LLM (§5.4)** — minta `num_clips + 3` lalu saring; parsing toleran-kerusakan dengan `raw_decode()` yang menghitung objek terselamatkan; buang pagar markdown; petakan `reason` → `description`.
@@ -416,7 +420,7 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 22. Fallback scoring heuristik lokal (energi audio, deteksi tawa, kata kunci) bila LLM gagal atau kuota habis — tanpa ini, satu gangguan API menghentikan seluruh pipeline.
 22a. **Klasifikasi kesalahan provider vs input** (§5.4) — HTTP 5xx/`ConnectionError` → "coba lagi / ganti model"; transkrip kosong/terlalu panjang → "pilih video lebih pendek". Jangan lempar pengecualian mentah ke UI.
 23. Endpoint `GET /jobs/:id/segments` + `POST /jobs/:id/rescore`.
-24. SSE `/jobs/:id/stream` via Redis pub/sub (NFR PRD §5).
+24. SSE `/jobs/:id/stream` ~~via Redis pub/sub~~ — sejak T9 via `LocalEventBus` in-process (NFR PRD §5).
 
 **DoD:** video 30 menit menghasilkan 1–10 segmen valid dengan skor + label; waktu transkripsi terukur dan terdokumentasi; respons LLM yang rusak sebagian tetap menghasilkan segmen (bukan gagal total), dibuktikan dengan test yang menyuntikkan JSON cacat.
 
@@ -429,10 +433,10 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 29. **Pipeline pipe FFmpeg yang aman** — thread pembuangan stderr + watchdog `ENCODE_STALL_TIMEOUT_S=300`; tanpa ini `stdin.write()` akan macet (§5.2).
 30. Generator ASS **satu-event-per-kata** (bukan tag `\k`): potongan 4 kata, kata berjalan diwarnai `{\c&H00FFFF&}`; **`PlayResX/Y` dari resolusi hasil probe**, metrik gaya diskalakan dari acuan 1080×1920 (§5.2.1).
 31. Burn subtitle + encode: `libx264 -preset fast -crf 18 -pix_fmt yuv420p`; audio diekstrak AAC 192k terpisah lalu di-*mux* `-c:v copy -c:a copy -shortest` (§5.2).
-32. Render preview 540×960 `veryfast`/CRF 30 + poster thumbnail → unggah R2.
+32. Render preview 540×960 `veryfast`/CRF 30 + poster thumbnail → disimpan di disk lokal (sejak T9; ~~unggah R2~~).
 33. Kalibrasi reframing pada set uji berlabel → laporkan presisi aktual, jangan klaim 85% sebelum diukur.
 
-**DoD:** klip vertical 9:16 dengan subtitle berjalan terbakar, tepi crop stabil (tidak goyang) pada rekaman 2 pembicara; encode tidak macet pada klip 45 detik; preview ter-render < 60 detik pada vCPU kelas CCX23.
+**DoD:** klip vertical 9:16 dengan subtitle berjalan terbakar, tepi crop stabil (tidak goyang) pada rekaman 2 pembicara; encode tidak macet pada klip 45 detik; preview ter-render < 60 detik di host lokal (~~vCPU kelas CCX23~~).
 
 ### Sprint 4 — Review Studio & Export (FR-4.3 + generator caption FR-4.2) (6–8 hari)
 
@@ -442,19 +446,19 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 33. Editor transkrip: perbaiki kesalahan fonetik → regenerate subtitle tanpa render ulang video penuh.
 34. Resolver preset subtitle + preview. **Keputusan:** debounce re-render di server (bukan libass WASM di browser) untuk MVP — lebih sedikit kode, konsisten dengan hasil final. Render preview tetap 540p/veryfast agar terasa responsif.
 35. Generator caption + hashtag berbasis AI untuk disalin saat unggah manual (PRD FR-4.2).
-36. Export manual: full render on-demand → presigned download URL; watermark opsional untuk free tier.
+36. Export manual: full render on-demand → berkas di `output/clips/` (sejak T9; ~~presigned download URL R2~~); watermark opsional untuk free tier.
 37. Status & riwayat job, penanganan error yang bisa dibaca pengguna.
 
 **DoD:** pengguna dapat mengubah transkrip, melihat preview terbarui, dan mengunduh MP4 1080×1920 dengan bitrate optimal (PRD FR-4.3).
 
 ### Sprint 5 — Hardening & Closed Beta (5–7 hari)
 
-38. Stress test: 20 upload paralel @ 2 GB, 10 job render bersamaan pada kelas VPS yang dipilih. Ukur p95 dan **biaya per video**.
-39. Uji starvation CPU: buktikan API tetap responsif selama render berjalan (ini validasi §4.3).
-40. Audit keamanan: TLS 1.3, AES-256 at rest, rotasi token, rate limiting, validasi SSRF pada URL YouTube.
-41. **Restore drill** backup Postgres (bukan sekadar membuat backup).
+38. Stress test lokal: 20 upload paralel @ 2 GB, 10 job render bersamaan di host (~~kelas VPS~~). Ukur p95 dan **biaya per video**.
+39. Uji starvation CPU: buktikan API tetap responsif selama render berjalan (padanan lokal §4.3).
+40. Audit keamanan: ~~TLS 1.3~~, AES-256 at rest, rotasi token, ~~rate limiting~~, validasi SSRF pada URL YouTube.
+41. ~~**Restore drill** backup Postgres~~ — dibatalkan T9 (tidak ada PostgreSQL); skema backup lokal `output/` BELUM DITENTUKAN.
 42. Validasi metrik ulang memakai kerangka §0.1 — laporkan time-to-first-clip aktual.
-43. Observability + alerting (Sentry, Flower, dashboard biaya), runbook on-call.
+43. Observability + alerting (Sentry, dashboard biaya; ~~Flower~~), runbook pribadi.
 44. Peluncuran Closed Beta + umpan balik.
 
 ---
@@ -466,15 +470,15 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 | **Biaya rendering membengkak** | Operasional tinggi | Preview 540p/veryfast; full render hanya saat export; admission control |
 | **Pemblokiran IP YouTube** | Ingest gagal | `yt-dlp` + PO token provider + rotasi proxy residensial |
 | **Koneksi putus saat upload > 1 GB** | Pengguna frustrasi | Multipart resume via `ListParts` + IndexedDB |
-| **CPU starvation di VPS** (risiko baru akibat D3) | API membeku saat render | §4.2 + §4.3 + butir uji 39 |
-| **Backup tidak teruji** (risiko baru akibat D3) | Kehilangan data permanen | Butir 41: restore drill wajib |
+| **CPU starvation di VPS** (risiko baru akibat D3) — **dibatalkan T9** | API membeku saat render | Padanan lokal: batas pool `RENDER_SLOTS`/`STT_SLOTS` (§4.2) |
+| **Backup tidak teruji** (risiko baru akibat D3) — **dibatalkan T9** | Kehilangan data permanen | Butir 41 dihapus; backup lokal BELUM DITENTUKAN |
 | **Target OKR kecepatan tidak tercapai** (risiko baru akibat D1) | Ekspektasi produk meleset | §0.1: metrik diganti + diukur di butir 19/42 |
 
 ---
 
 ## 8. Pertanyaan Terbuka (dibutuhkan sebelum Sprint 0 dimulai)
 
-1. **Spesifikasi VPS Hetzner** — jumlah vCPU/RAM/tipe instance. Ini menentukan `RENDER_SLOTS` dan apakah 1 render + 1 STT paralel aman.
+1. ~~**Spesifikasi VPS Hetzner** — jumlah vCPU/RAM/tipe instance. Ini menentukan `RENDER_SLOTS` dan apakah 1 render + 1 STT paralel aman.~~ **Dibatalkan T9** — tidak ada VPS; padanannya kapasitas host lokal (`constraints.md` §6).
 2. **Kelas proxy residensial** — penyedia dan anggaran bulanan untuk ingest YouTube.
 3. **Anggaran LLM scoring** — menentukan Gemini Flash vs Haiku sebagai default dan panjang transkrip yang dikirim per permintaan.
 4. **Model bisnis / tier** — menentukan perlu tidaknya watermark dan pembatasan kuota di MVP.
@@ -483,7 +487,7 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 
 ## 9. Status Dokumen
 
-Dokumen ini **membekukan** rencana untuk D1–D4. Belum ada kode yang ditulis. Langkah berikutnya adalah Sprint 0 butir 1–9 setelah §8 terjawab.
+Dokumen ini **membekukan** rencana untuk D1–D4 (situasi saat ditulis, 2026-09-20). Sejak itu kode sudah ditulis (D4 usang) dan mode deployment dihapus (T9) — lihat catatan di atas dan [`../memory/decisions.md`](../memory/decisions.md).
 
 ### 9.1 Sumber Referensi Eksternal
 

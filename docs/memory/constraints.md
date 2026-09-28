@@ -1,11 +1,14 @@
 # Constraints — Batasan Operasional & Lingkungan
 
-> **Catatan 2026-09-27 (T9):** Docker, WSL, PostgreSQL, Redis, dan pin Python 3.12 tidak lagi relevan — aplikasi berjalan lokal saja (Python 3.12–3.14). Bagian terkait disimpan sebagai riwayat.
+> **Catatan 2026-09-27 (T9):** aplikasi berjalan **lokal saja** di Windows
+> (satu proses, Python 3.12–3.14). Docker, WSL, PostgreSQL, Redis, Celery, R2,
+> dan pin Python 3.12 untuk container **dibatalkan**; bagian yang hanya berlaku
+> untuk deployment VPS sudah dihapus dan diganti satu bagian riwayat di §9.
 
 File ini adalah **filter pertama** sebelum menjalankan apa pun secara lokal.
 Banyak perintah yang "wajar" di laptop lain akan **salah** di environment ini.
 
-Sumber: TECH_SPEC §4, §6 (Sprint 0), §2.
+Sumber: TECH_SPEC §4, §6 (Sprint 0), §2; T9.
 
 ---
 
@@ -20,40 +23,28 @@ Sumber: TECH_SPEC §4, §6 (Sprint 0), §2.
 | Item | Status terverifikasi | Implikasi |
 |---|---|---|
 | OS host | **Windows 10 (19045)** | Jalur lokal resmi: **Standalone native** (`npm run dev` / `start.cmd`) |
-| Python host | **3.14.6** di `.venv-win` | Cukup untuk API + worker in-process (wheel `cp314` tersedia); pin 3.12 hanya untuk image container (T3) |
+| Python host | **3.14.6** di `.venv-win` | Cukup untuk API + worker in-process (wheel `cp314` tersedia); 3.12–3.14 didukung setara (T9) |
 | Node host | **v24.13.1** | Target 22 LTS; npm memberi `EBADENGINE` tetapi `next dev` jalan |
 | `nvidia-smi` | tidak ada | Tidak ada GPU → konsisten dengan D1 (CPU-only) |
 | `ffmpeg` | `.libs/ffmpeg/` (build BtbN, diunduh `setup.cmd`) | `libass` + `libx264` terverifikasi; dipakai lewat `FFMPEG_BINARY`, bukan `PATH` |
 | PostgreSQL / Redis | **tidak dipakai** lokal | SQLite `output/clipper.db` + runner in-process + `LocalEventBus` |
-| `docker` | tidak ada | Hanya relevan untuk deployment VPS (D3) |
+| `docker` | tidak ada | Tidak dipakai sama sekali — mode distributed dihapus (T9) |
 
-### 1.2 WSL2 (historis — tidak lagi dipakai, lihat T8)
-
-| Item | Status terverifikasi (2026-09-20) |
-|---|---|
-| Distro | **Ubuntu 26.04 LTS ("resolute")** |
-| vCPU | **2 vCPU** |
-| RAM total | **1.9 GiB** (~**1.3 GiB** tersedia) |
-| Swap | **3 GiB** |
-| Python | **3.14.4** — hanya `/usr/bin/python3.14` |
-| `ffmpeg` | **8.0.1** ✅ |
-| Docker | **TIDAK ADA**; `systemctl is-active docker` = **inactive** |
-
-Sumber: probe host langsung (verifikasi pengguna, 2026-09-20; diperbarui 2026-09-26), menggantikan TECH_SPEC §1.1.
+Sumber: probe host langsung (verifikasi pengguna, 2026-09-26), menggantikan TECH_SPEC §1.1.
 
 ---
 
-## 2. Python — 3.12 untuk Container, 3.14 untuk Lokal
+## 2. Python — 3.12–3.14, Tanpa Container
 
-- **Image container produksi WAJIB** Python **3.12.x** (base
-  `python:3.12-slim-bookworm`) — T3.
+- Aplikasi menerima Python **3.12–3.14** (`pyproject.toml`: `>=3.12,<3.15`).
 - **Lokal Windows** memakai Python **3.14.6** di `.venv-win`
-  (`pyproject.toml` menerima `>=3.12,<3.15`). `mediapipe`, `ctranslate2`
-  (`faster-whisper`), dan `opencv-python-headless` menyediakan wheel `cp314`.
-- Suite yang lulus di 3.14 **bukan** bukti kompatibilitas 3.12; bukti sah:
-  `make test-312`.
+  (`mediapipe`, `ctranslate2`/`faster-whisper`, dan
+  `opencv-python-headless` menyediakan wheel `cp314`).
+- Tidak ada image container produksi (T9). **Bukti kompatibilitas 3.12 adalah
+  job CI** (`.github/workflows/ci.yml`, `python-version: "3.12"`), bukan
+  `make test-312` — Makefile sudah dihapus.
 
-Sumber: TECH_SPEC §6 Sprint 0 butir 2; status instalasi dari probe host.
+Sumber: TECH_SPEC §6 Sprint 0 butir 2; CI workflow; status instalasi dari probe host.
 
 ---
 
@@ -65,10 +56,9 @@ Sumber: TECH_SPEC §6 Sprint 0 butir 2; status instalasi dari probe host.
 | Lokasi | Status verifikasi |
 |---|---|
 | Lokal Windows `.libs/ffmpeg/` | ✅ build BtbN `N-126755+`, `--enable-libass` + `--enable-libx264` |
-| WSL2 (historis) | ✅ 8.0.1, `libx264-165`, `libass9` |
 
 > ⚠️ Banyak paket FFmpeg distro **tidak** menyertakan `libass` — jangan
-> berasumsi image/container lain otomatis aman, verifikasi per image.
+> berasumsi build lain otomatis aman, verifikasi per build.
 
 > Build BtbN Windows memakai TLS **Schannel** (`--enable-schannel`). Aman untuk
 > alur sekarang (yt-dlp mengunduh sendiri, FFmpeg hanya menggabungkan lokal).
@@ -85,15 +75,16 @@ Sumber: TECH_SPEC §1.1, §2, §6 Sprint 3 butir 28–29; probe host.
 
 ---
 
-## 4. Docker & WSL — Hanya Relevan untuk Deployment
+## 4. Tanpa Docker & Tanpa WSL
 
-- Lokal **tidak** memakai Docker maupun WSL (T8). Tidak ada lagi alasan
-  memasang Docker di workstation untuk development.
-- `docker-compose.yml` dan Dockerfile tetap menjadi definisi deployment
-  VPS (D3). Docker belum terpasang di workstation ini, jadi compose hanya
-  divalidasi statis (`scripts/validate_compose.py` lewat Makefile).
+- Lokal **tidak** memakai Docker maupun WSL (T8). Tidak ada alasan memasang
+  Docker di workstation untuk development — dan tidak ada jalur deployment
+  yang membutuhkannya (T9).
+- Tidak ada `docker-compose.yml`, Dockerfile, `Makefile`, maupun
+  `scripts/validate_compose.py` di repo ini. Jangan menulis instruksi yang
+  mengasumsikannya (mis. `make test-312`, `docker compose up`).
 
-Sumber: probe host; TECH_SPEC §1.1; T8.
+Sumber: probe host; TECH_SPEC §1.1; T8; T9.
 
 ---
 
@@ -105,29 +96,32 @@ Sumber: probe host; TECH_SPEC §1.1; T8.
 | STT `small` int8 di CPU | ~1.0× realtime terukur di host ini; lihat `metrics.md` |
 | Render | `RENDER_SLOTS`/`STT_SLOTS` memakai semaphore lokal in-process |
 
-Batas WSL2 1.9 GiB (§1.2) tidak lagi relevan karena WSL tidak dipakai.
+Semua pekerjaan berjalan di satu mesin: antrean render yang panjang tidak
+menahan job baru karena tiap tahap punya thread pool sendiri (§6).
 
 Sumber: probe host; `metrics.md`; T8.
 
 ---
 
-## 6. QoS & Isolasi CPU
+## 6. Batas Paralel Lokal (pengganti QoS container)
+
+Ukuran thread pool per tahap **adalah** batas paralelnya
+(`clipper_shared.dispatcher`):
 
 | Kontrol | Nilai | Catatan |
 |---|---|---|
-| `RENDER_SLOTS` | **1** | Worker render hanya satu task sekaligus |
-| `STT_SLOTS` | **1** | Worker STT hanya satu task sekaligus |
-| `render_concurrency` | `1`, `--max-tasks-per-child=1` | Proses anak dibuang setelah 1 task (bocor memori FFmpeg/MediaPipe) |
-| `cpu.max` (cgroup v2) | **isolasi wajib** per container | Mencegah render membekukan API |
-| vCPU dedicated | CCX, bukan CX (shared) | Shared vCPU → waktu render tak terprediksi |
-| Admission control | wajib | Tanpa auto-scale, tolak job baru saat kapasitas penuh |
+| `RENDER_SLOTS` | **1** (bawaan) | Pool `render`: satu task FFmpeg/MediaPipe sekaligus |
+| `STT_SLOTS` | **1** (bawaan) | Pool `stt`: satu transkripsi sekaligus |
+| `INGEST_WORKERS` | `2` (bawaan) | Pool `ingest`: lebih banyak menunggu jaringan |
+| Anak proses dibuang setelah 1 task | `--max-tasks-per-child=1` (setara) | Mencegah bocor memori FFmpeg/MediaPipe menumpuk antar job |
 
-**Tujuan isolasi:** API (container A) harus tetap responsif selama render
-berjalan. Ini divalidasi eksplisit di Sprint 5 butir 39 ("uji starvation CPU").
+**Tujuan batas ini:** API harus tetap responsif selama render berjalan —
+beban berat tidak boleh dijalankan di luar pool-nya.
 
-`RENDER_SLOTS` final **BELUM DITENTUKAN** — bergantung spesifikasi VPS (TECH_SPEC §8 butir 1).
+`RENDER_SLOTS`/`STT_SLOTS` **BELUM DITENTUKAN** nilai finalnya untuk host ini —
+menaikkannya hanya setelah kapasitas terukur (`metrics.md`).
 
-Sumber: TECH_SPEC §4.2, §4.3, §6 Sprint 5 butir 39.
+Sumber: TECH_SPEC §4.2, §4.3; `clipper_shared.dispatcher`; T9.
 
 ---
 
@@ -135,16 +129,16 @@ Sumber: TECH_SPEC §4.2, §4.3, §6 Sprint 5 butir 39.
 
 | # | Larangan | Alasan |
 |---|---|---|
-| **F1** | ~~Memakai hasil test di Python 3.14 sebagai bukti kompatibilitas image produksi~~ | Tidak berlaku sejak T9: tidak ada image; 3.12–3.14 didukung setara. |
-| **F2** | Menjalankan FFmpeg/STT/render di container **api** | Melanggar pemisahan 3-container; API membeku saat render |
-| **F3** | Mengandalkan **hanya** lifecycle rule R2 untuk retensi 48 jam | Lifecycle rule berbasis prefix+umur, bukan kejadian (§3 TECH_SPEC). Wajib maintenance task |
+| **F1** | ~~Memakai hasil test di Python 3.14 sebagai bukti kompatibilitas image produksi~~ | Tidak berlaku sejak T9: tidak ada image; 3.12–3.14 didukung setara, dan bukti 3.12 datang dari job CI. |
+| **F2** | Menjalankan FFmpeg/STT/render di luar `clipper_shared.dispatcher` (thread/process sendiri) | Melewati batas pool `RENDER_SLOTS`/`STT_SLOTS`; API membeku saat render berjalan |
+| **F3** | Mengandalkan pembersihan otomatis OS untuk retensi 48 jam | Tidak ada lifecycle rule object storage; wajib `clipper_shared.maintenance.purge_expired_raw_media` |
 | **F4** | ~~Membuat scaffold kode / docker-compose sebagai bagian dari tugas dokumen~~ | **DIBATALKAN** — D4 tidak lagi berlaku; kode boleh dan memang sedang ditulis (lihat `README.md`) |
-| **F5** | Menaikkan `RENDER_SLOTS`/`STT_SLOTS` tanpa mengukur kapasitas VPS | Tanpa auto-scale, menyebabkan CPU starvation |
+| **F5** | Menaikkan `RENDER_SLOTS`/`STT_SLOTS` tanpa mengukur kapasitas host lokal | Tanpa pengukuran, render/STT yang berlebih membuat API lambat |
 | **F6** | Mengklaim target OKR kecepatan PRD tercapai | Melanggar D1; lihat `metrics.md` |
-| **F7** | Menyalakan PostgreSQL/Redis/Celery untuk development lokal | Lokal selalu Standalone (T8); `_env.cmd` memaksa `STANDALONE=true` |
+| **F7** | Menyalakan PostgreSQL/Redis/Celery untuk development lokal | Mode distributed dihapus (T9); jalur lokal selalu satu proses Standalone |
 | **F8** | Menjalankan layanan lokal di konsol bersama tanpa isolasi | `uvicorn --reload` mengirim `CTRL_C_EVENT` ke seluruh konsol; pakai `npm run dev` (konsol tersembunyi per layanan) |
 
-Sumber: TECH_SPEC §0 (D1), §3, §4.2, §4.3, §6 Sprint 0 butir 2; probe host.
+Sumber: TECH_SPEC §0 (D1), §3, §4.2, §4.3; probe host; T9.
 
 ---
 
@@ -154,36 +148,35 @@ Sumber: TECH_SPEC §0 (D1), §3, §4.2, §4.3, §6 Sprint 0 butir 2; probe host.
 |---|---|---|
 | Jalur dev | **Windows native Standalone** | `npm run dev` atau `start.cmd`; satu jendela (T8) |
 | Setup | `scripts/setup.cmd` otomatis | `.env`, `.venv-win` + pip, FFmpeg, model wajah, `npm ci` |
-| Python lokal | **3.14.6** di `.venv-win` | Container tetap 3.12 |
+| Python lokal | **3.14.6** di `.venv-win` | 3.12–3.14 didukung setara (T9) |
 | Basis data lokal | SQLite `output/clipper.db` | Dibuat otomatis saat API start |
-| Orkestrasi prod | Dokploy + Traefik di Hetzner; `docker-compose.yml` (Postgres 16, Redis 7.2, 3 container app) | D3 |
 | Node | **22 LTS** untuk frontend | Host punya v24.13.1 — jalan dengan peringatan |
 
 Sumber: probe host; TECH_SPEC §2, §1; T8.
 
 ---
 
-## 9. Konsekuensi Backup (akibat D3)
+## 9. Riwayat (dibatalkan oleh T9)
 
-VPS self-managed **tidak** punya backup terkelola. Karena itu, sebelum Beta:
-
-- `pg_dump` harian → R2, dan
-- **restore drill** (bukan hanya membuat backup) — Sprint 5 butir 41.
-
-Sumber: TECH_SPEC §4.4, §6 Sprint 5 butir 41.
+Rencana awal memakai **Docker/VPS**: tiga container (api, worker-light,
+worker-render) di Hetzner CCX + Dokploy + Traefik, PostgreSQL 16 + Redis 7 +
+Celery sebagai queue, Cloudflare R2 sebagai object storage, `cpu.max` cgroup
+per container, `pg_dump` harian + restore drill, dan `docker-compose.yml` +
+Makefile + `scripts/validate_compose.py` sebagai alat operasinya. Rencana itu
+**dibatalkan seluruhnya oleh T9**: tidak ada Docker, WSL, PostgreSQL, Redis,
+Celery, R2, maupun deployment server; aplikasi berjalan lokal sebagai satu
+proses. Detail keputusan ada di `decisions.md` (D3, T2, T3, T4, T9).
 
 ---
 
 ## 10. Belum Ditentukan
 
-- **BELUM DITENTUKAN** — Spesifikasi VPS Hetzner (vCPU, RAM, tipe instance) →
-  menentukan nilai `RENDER_SLOTS`/`STT_SLOTS` final.
-- **BELUM DITENTUKAN** — Nilai `cpu.max` konkret per container (baru disebut
-  "isolasi wajib", bukan angka).
+- **BELUM DITENTUKAN** — Nilai `RENDER_SLOTS`/`STT_SLOTS` final untuk host ini
+  (baru boleh dinaikkan setelah pengukuran kapasitas).
 - **BELUM DITENTUKAN** — Penyedia & anggaran proxy residensial untuk ingest YouTube.
 - **BELUM DITENTUKAN** — Apakah GPU akan ditambahkan (D1 hedge disebut di §5.1,
   jalurnya belum ditetapkan).
-- **BELUM DITENTUKAN** — Cara memasang Docker di mesin deployment/CI agar
-  `docker-compose.yml` diuji eksekusi, bukan hanya validasi statis.
+- **BELUM DITENTUKAN** — Skema backup data lokal `output/` (SQLite + media)
+  bila pengguna ingin salinan aman; belum ada keputusan.
 
-Sumber: TECH_SPEC §4.1, §4.3, §5.1, §8; probe host.
+Sumber: TECH_SPEC §4.1, §4.3, §5.1, §8; probe host; T9.

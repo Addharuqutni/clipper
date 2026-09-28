@@ -74,13 +74,13 @@ Repo referensi **bukan** cetak biru ClipperAI. Perbedaannya material:
 
 | Aspek | Repo referensi | ClipperAI |
 |---|---|---|
-| Bentuk | Desktop (Tauri), satu pengguna | Web app; lokal satu pengguna (Standalone, T8), deployment VPS |
+| Bentuk | Desktop (Tauri), satu pengguna | Web app; lokal satu pengguna (Standalone, T8/T9) |
 | Transkrip | Subtitle YouTube yang sudah ada | Subtitle YouTube bila ada, selain itu **Whisper sendiri** (TECH_SPEC D1) |
-| Penyimpanan | Berkas lokal | Lokal: SQLite + `output/`; deployment: Cloudflare R2 + Postgres |
-| Antrean | Proses lokal | Lokal: thread pool in-process; deployment: Celery + Redis |
+| Penyimpanan | Berkas lokal | SQLite + `output/` (disk lokal) |
+| Antrean | Proses lokal | Thread pool in-process per tahap (`clipper_shared.dispatcher`) |
 | Publishing | Repliz API pihak ketiga | Dihapus (D5) |
-| Runtime | Sidecar Python dibekukan | Lokal: `.venv-win` (Python 3.14); deployment: container Python 3.12 |
+| Runtime | Sidecar Python dibekukan | `.venv-win` (Python 3.14) |
 
 Konsekuensinya: **angka dan pola** dapat dipakai ulang; **arsitektur tidak**.
 
-Sumber: TECH_SPEC §5.2, §5.2.1, §5.4, §9.1; Sprint 2–3.
+Sumber: TECH_SPEC §5.2, §5.2.1, §5.4, §9.1; Sprint 2–3; T9.

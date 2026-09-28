@@ -4,7 +4,7 @@ Utang teknis yang **sudah dicatat dan diterima**, bukan bug dan bukan kelalaian.
 Jangan mengangkatnya sebagai temuan baru; angkat hanya kalau pemicu peninjauannya
 sudah tercapai.
 
-Sumber: TECH_SPEC §5.2, §5.3.
+Sumber: TECH_SPEC §5.2, §5.3; T9.
 
 ---
 
@@ -13,7 +13,7 @@ Sumber: TECH_SPEC §5.2, §5.3.
 | Utang | Alasan ditunda | Kapan ditinjau |
 |---|---|---|
 | **Speaker diarization** (`pyannote`) | Terlalu berat di CPU | Saat GPU tersedia atau STT pindah ke API |
-| **Auto-scale / deployment server** | Aplikasi lokal saja (**T9**) | Bila perlu multi-pengguna di server |
+| **Auto-scale / deployment server** | Aplikasi lokal saja (**T9**); tidak ada VPS/container | Bila perlu multi-pengguna di server (berarti menulis ulang lapisan antrean/penyimpanan) |
 | **Overlay B-roll = encode kedua** | Subtitle sudah satu pass dengan reframe; overlay butuh `filter_complex` dengan input tambahan | Bila render dengan overlay terasa lambat |
 | **Batal tidak memutus FFmpeg/Whisper yang berjalan** | Berhenti di titik periksa `emit`; proses anak dibiarkan selesai | Bila pembatalan cepat penting |
 | **Kandidat cadangan tanpa AI** = kepadatan kata | Heuristik murah saat penyedia AI gagal | Bila kualitas cadangan dikeluhkan |
@@ -54,15 +54,21 @@ Sumber: TECH_SPEC §2 (baris Diarization), §3, §5.3.
 (ASD)**, padahal **PRD §6 mengasumsikan** kemampuan ini tersedia (baris "Video
 Engine: FFmpeg, OpenCV, MediaPipe — MediaPipe untuk tracking wajah & reframe").
 
-### Jalur MVP pengganti (TECH_SPEC §5.2)
+### Jalur MVP pengganti (TECH_SPEC §5.2 revisi)
 
-1. Deteksi wajah **BlazeFace** pada **5 fps** — sampling, bukan tiap frame.
-2. **ByteTrack** (`boxmot`) untuk identitas wajah stabil antar frame.
-3. **Skor pembicara aktif** = f(perubahan area mulut, energi audio pada window,
-   kontinuitas track).
-4. **Crop:** median filter window **15 frame** + **deadband** — kamera tidak
-   bergerak bila pergeseran < **3%** lebar frame (mencegah kamera goyang).
-5. **Split-screen** otomatis hanya bila ≥ 2 track aktif dengan pergantian bicara cepat.
+1. **MediaPipe Face Landmarker** (`mediapipe.tasks`, `RunningMode.VIDEO`,
+   `num_faces=10`) dengan konversi **BGR→RGB** sebelum `detect_for_video()`.
+2. **Sinyal bicara** dari bukaan 24 lip-landmark: `MIN_SPEAK_RATIO=0.18`.
+3. **Skor pembicara aktif** per frame: ukuran × (1 + `SPEAKER_BONUS`×bicara) −
+   `CONTINUITY_WEIGHT`×jarak dari crop sekarang.
+4. **Penghalusan crop:** `EMA_ALPHA=0.15`, deadband `DEADZONE_FRAC=0.02`,
+   snap pada ganti adegan `SNAP_FRAC=0.35`; pertahankan posisi terakhir bila
+   wajah hilang.
+5. **`ByteTrack`/`boxmot` dibatalkan** — kontinuitas dijaga oleh
+   `CONTINUITY_WEIGHT`, bukan tracker terpisah.
+
+Rincian lengkap dan kedua jebakan implementasinya (ruang warna; deadlock pipe
+FFmpeg) ada di TECH_SPEC §5.2.
 
 ### Pernyataan jujur dari spec
 
@@ -78,15 +84,16 @@ Sumber: PRD §6; TECH_SPEC §5.2, §6 Sprint 3 butir 27 & 31.
 
 ## 4. Ringkasan Risiko Utang yang Sudah Diakui
 
-TECH_SPEC §7 mencatat empat risiko yang terkait langsung dengan utang di atas:
+Satu risiko TECH_SPEC §7 yang terkait langsung dengan utang di atas **masih
+berlaku**, dan dua risiko VPS **dibatalkan oleh T9**:
 
 | Risiko | Mitigasi |
 |---|---|
-| CPU starvation di VPS (akibat D3) | §4.2 + §4.3 + uji butir 39 |
-| Backup tidak teruji (akibat D3) | Butir 41: restore drill wajib |
 | Target OKR kecepatan tidak tercapai (akibat D1) | §0.1: metrik diganti + diukur di butir 19/42 |
+| ~~CPU starvation di VPS~~ | **Dibatalkan T9** — tidak ada VPS; diganti batas paralel lokal (`RENDER_SLOTS`/`STT_SLOTS`, `constraints.md` §6) |
+| ~~Backup tidak teruji~~ | **Dibatalkan T9** — tidak ada PostgreSQL/VPS yang di-backup |
 
-Sumber: TECH_SPEC §7.
+Sumber: TECH_SPEC §7; T9.
 
 ---
 
@@ -96,8 +103,9 @@ Sumber: TECH_SPEC §7.
   menunggu GPU memakai pemicu yang sama, tapi tidak ada tanggal/anggaran).
 - **BELUM DITENTUKAN** — Pengganti konkret untuk diarization jangka panjang
   (mis. model apa saat GPU tersedia).
-- **BELUM DITENTUKAN** — Mekanisme auto-scale saat migrasi ke cloud (disebut
-  sebagai pemicu peninjauan, bukan rencana).
+- **BELUM DITENTUKAN** — Rencana bila kelak butuh multi-pengguna/deployment:
+  memakai di server berarti menulis ulang lapisan antrean/penyimpanan (T9),
+  dan belum ada desainnya.
 - **BELUM DITENTUKAN** — Tingkat keandalan heuristik energi+gap vs diarization
   sungguhan (belum ada pengukuran).
 

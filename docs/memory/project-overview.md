@@ -53,7 +53,7 @@ Sumber: PRD §2.
 Reproduksi alur dari PRD §3 sebagai teks (urutan tahap):
 
 1. **User Input** — YouTube URL atau file lokal > 1 GB.
-2. **Pre-Processing & Validation** — Direct S3/R2 Multipart Upload atau YouTube Fetch.
+2. **Pre-Processing & Validation** — Unggah per potongan ke API lokal atau YouTube Fetch.
 3. **ASR: Audio Extraction & Transcription** — Whisper timestamped output.
 4. **AI Scoring Engine & Segment Selection** — LLM mengevaluasi *hooks*, *pacing*, dan *story*.
 5. **Video Generation & Rendering** — Auto-crop 9:16 + active speaker + kinetic subtitles.
@@ -120,7 +120,7 @@ Sumber: TECH_SPEC §0, §5.3, §6.
 
 - **BELUM DITENTUKAN** — Model bisnis / tier pricing dan perlu tidaknya
   watermark (masih pertanyaan terbuka; TECH_SPEC §8 butir 4).
-- **BELUM DITENTUKAN** — Spesifikasi VPS Hetzner (vCPU/RAM/tipe instance);
-  TECH_SPEC §8 butir 1.
+- **BELUM DITENTUKAN** — Kapasitas host lokal (jumlah core efektif untuk
+  `RENDER_SLOTS`/`STT_SLOTS`); lihat `constraints.md` §6.
 
-Sumber: TECH_SPEC §8; PRD §1, §2, §3, §4.
+Sumber: TECH_SPEC §8; PRD §1, §2, §3, §4; T9.

@@ -60,7 +60,7 @@ Sumber: TECH_SPEC §0.1, §2.
 | Konteks | Angka yang dipakai |
 |---|---|
 | Klaim pemasaran / copy UI | **Time-to-first-clip ≤ 25 menit**, bukan "5 menit" |
-| Perencanaan kapasitas `RENDER_SLOTS`/`STT_SLOTS` | Tabel §2 di atas + spesifikasi VPS (BELUM DITENTUKAN) |
+| Perencanaan kapasitas `RENDER_SLOTS`/`STT_SLOTS` | Tabel §2 di atas + kapasitas host lokal (`constraints.md` §6; BELUM DITENTUKAN) |
 | Validasi akhir | Sprint 5 butir 42: **laporkan time-to-first-clip aktual** memakai kerangka §0.1 |
 | Penetapan default model | `small` int8 |
 | Presisi reframing | Diukur di Sprint 3 butir 31 pada set uji 20 klip berlabel |
@@ -84,12 +84,12 @@ Sumber: TECH_SPEC §7, §6 Sprint 5 butir 42.
 
 ## 5. BELUM DITENTUKAN
 
-- **BELUM DITENTUKAN** — Nilai `time-to-first-clip` aktual pada VPS produksi
+- **BELUM DITENTUKAN** — Nilai `time-to-first-clip` aktual di host ini
   (baru akan diukur Sprint 5 butir 42; angka 25 menit adalah **target**, bukan hasil).
 - **BELUM DITENTUKAN** — Presisi reframing aktual (target ≥ 85%; hasil kalibrasi
   Sprint 3 butir 31 belum ada).
-- **BELUM DITENTUKAN** — Jumlah vCPU final → semua angka tabel §2 bersifat
-  indikatif sampai spesifikasi VPS (§8 butir 1) diputuskan.
+- **BELUM DITENTUKAN** — Kapasitas final host → semua angka tabel §2 bersifat
+  indikatif sampai `RENDER_SLOTS`/`STT_SLOTS` diukur (`constraints.md` §6).
 - **BELUM DITENTUKAN** — Biaya per video (target pengukuran Sprint 5 butir 38).
 
-Sumber: TECH_SPEC §0.1, §6 Sprint 3 butir 31, Sprint 5 butir 38 & 42, §8 butir 1.
+Sumber: TECH_SPEC §0.1, §6 Sprint 3 butir 31, Sprint 5 butir 38 & 42; T9.

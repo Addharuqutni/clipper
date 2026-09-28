@@ -1,82 +1,60 @@
 # Architecture — ClipperAI
 
-> **Catatan 2026-09-27 (T9):** bagian tentang 3 container, Redis/Celery, PostgreSQL, dan R2/MinIO adalah desain awal dan **sudah dihapus dari kode**. Arsitektur yang berlaku: [pengembangan/arsitektur.md](../pengembangan/arsitektur.md).
+> **Catatan 2026-09-27 (T9):** arsitektur yang berlaku adalah **lokal satu
+> proses**. Bagian lama (3 container, Redis/Celery, PostgreSQL, R2/MinIO,
+> presigned upload) sudah dihapus dari kode dan tidak lagi menjadi acuan;
+> ringkasannya ada di §5. Arsitektur ringkas sehari-hari:
+> [pengembangan/arsitektur.md](../pengembangan/arsitektur.md).
 
-Arsitektur dari TECH_SPEC §1, tech stack final §2, dan skema DB §3.
-Semua nama tabel di sini **sama persis** dengan TECH_SPEC §3.
+Arsitektur dari TECH_SPEC §1 (mode lokal), tech stack final §2, dan skema DB §3.
+Nama tabel di sini **sama persis** dengan TECH_SPEC §3.
 
-Sumber: TECH_SPEC §1, §1.1, §2, §3.
+Sumber: TECH_SPEC §1, §1.1, §2, §3; T8; T9.
 
 ---
 
-## 1. Diagram 3-Container (deployment Docker/VPS)
+## 1. Arsitektur Lokal (satu proses)
 
 ```
-┌────────────────────────┐
-│  Next.js (browser)     │
-│  · Uploader multipart  │───┐
-│  · Review Studio       │   │ presigned PUT langsung ke R2
-│  · SSE progress        │   │ (bypass API server)
-└───────────┬────────────┘   │
-            │ REST + SSE     │
-            ▼                │
-┌────────────────────────┐   │
-│ FastAPI (container A)  │   │
-│ · auth, jobs, presign  │   │
-│ · TIDAK render/STT     │   │
-└───┬────────────────┬───┘   │
-    │                │       │
-    ▼                ▼       ▼
-┌─────────┐   ┌──────────┐  ┌──────────────────┐
-│ Postgres│   │  Redis 7 │  │ Cloudflare R2    │
-│ 16      │   │ broker + │  │ (S3-compatible)  │
-│+pgvector│   │ pub/sub  │  │ lifecycle rules  │
-└─────────┘   └────┬─────┘  └──────────────────┘
-                   │               ▲
-        ┌──────────┴──────────┐    │
-        ▼                     ▼    │
-┌────────────────┐   ┌────────────────────┐
-│ worker-light   │   │ worker-render      │
-│ (container B)  │   │ (container C)      │
-│ ingest, STT,   │   │ FFmpeg + MediaPipe │
-│ LLM scoring    │   │ concurrency=1      │
-│ concurrency=2  │   │ cpu-limit ketat    │
-└────────────────┘   └────────────────────┘
-   1–2 vCPU            2–6 vCPU, dedicated
+┌────────────────────────────────────────────────────────┐
+│  Next.js (:3000)                                       │
+└──────────────────────────┬─────────────────────────────┘
+                           │ HTTP REST + SSE (127.0.0.1)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│  FastAPI (:8000, hanya 127.0.0.1)                      │
+│  · clipper_shared.dispatcher: thread pool per tahap    │
+│      ingest (INGEST_WORKERS=2) · stt (STT_SLOTS=1)     │
+│      · render (RENDER_SLOTS=1)                         │
+│  · LocalEventBus: status job → SSE                     │
+│  · clipper_shared.maintenance: reconcile + purge       │
+└──────────────┬──────────────────────────┬──────────────┘
+               ▼                          ▼
+   SQLite output/clipper.db       Disk output/ (raw, render, clips)
 ```
 
-**Prinsip pemisahan:** container A/B/C **terpisah secara fisik**, karena FFmpeg
-dapat menghabiskan seluruh core dan akan membekukan API bila berbagi. Ini
-konsekuensi langsung dari **D3** (VPS self-managed, tanpa auto-scale platform).
+**Ukuran pool = batas paralelnya.** Sejak T9 tidak ada semaphore Redis;
+pekerjaan yang belum dapat giliran menunggu di antrean pool-nya. Pool terpisah
+membuat antrean render yang panjang tidak menahan job baru di tahap ingest.
 
-### Pemetaan container → queue
+**Status job** ditulis ke SQLite oleh `clipper_shared.worker_events.emit`,
+lalu disiarkan ke koneksi SSE di proses yang sama. `emit` melempar
+`JobCanceled` bila job dibatalkan/dihapus, sehingga task berhenti di titik
+periksa berikutnya.
 
-| Container | Peran | Queue | Concurrency |
-|---|---|---|---|
-| **A — api** | auth, jobs, presign, SSE. Stateless, **tidak pernah** menyentuh FFmpeg | — | — |
-| **B — worker-light** | ingest, STT (`faster-whisper`), LLM scoring | `ingest`, `transcribe`, `analyze` | `2` |
-| **C — worker-render** | FFmpeg + MediaPipe, crop 9:16, burn subtitle | `render` | `1` (`--max-tasks-per-child=1`) |
-| — (beat) | retensi 48 jam, housekeeping | `maintenance` | — |
-
-Sumber: TECH_SPEC §1, §2 (baris Queue), §4.3.
-
-### Mode lokal: Windows Standalone (T8)
-
-Di workstation Windows, ketiga container dilebur ke **satu proses API**:
-
-```
-Next.js dev (:3000) ──REST+SSE──▶ FastAPI (:8000, STANDALONE=true)
-                                   · worker-light + worker-render dijalankan
-                                     ThreadPoolExecutor (clipper_shared.dispatcher)
-                                   · LocalEventBus (SSE), LocalSemaphore (slot)
-                                   ├─▶ SQLite  output/clipper.db
-                                   └─▶ disk    output/ (raw, overlay, render, clips)
-```
+**Saat startup** (`app/main.py`): skema SQLite dibuat/diselaraskan (tanpa
+Alembic), job/render yang masih `queued`/`running` ditandai gagal (sisa sesi
+yang terputus), ruang kerja sementara disapu, dan pembersihan media kedaluwarsa
+dijadwalkan tiap jam (retensi 48 jam — `clipper_shared.maintenance`).
 
 Tanpa PostgreSQL, Redis, Celery, WSL, maupun Docker. Dijalankan dengan
-`npm run dev` atau `start.cmd` (satu jendela). Pemisahan fisik A/B/C hanya
-berlaku di deployment, karena lokal tidak ada pengguna lain yang API-nya bisa
-membeku.
+`npm run dev` atau `start.cmd` (satu jendela).
+
+**Tahap pipeline:** `ingest` → `transcribe` → `analyze` → `render` (ditulis
+worker sebagai kata kerja dasar: `ingest`, `transcribe`, `analyze`, `render`,
+plus `upload`/`done`).
+
+Sumber: TECH_SPEC §1, §2, §4.3; T8; T9.
 
 ---
 
@@ -84,41 +62,36 @@ membeku.
 
 | Layer | Teknologi | Alasan / Catatan kunci |
 |---|---|---|
-| **Frontend** | Next.js 15 (App Router, TS), Tailwind CSS v4, shadcn/ui, TanStack Query, Zustand | SSR untuk halaman marketing/SEO; uploader wajib client-side |
-| **Upload** | `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` (browser), `react-dropzone`, IndexedDB untuk state resume | Multipart 10 MB/part, resume via `ListParts`, retry eksponensial |
-| **API** | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Alembic, `sse-starlette` | Stateless; tidak pernah menyentuh FFmpeg |
-| **Queue** | Celery 5 + Redis 7 (broker/backend), Flower (monitoring) | Queue terpisah: `ingest`, `transcribe`, `analyze`, `render`, `maintenance` |
-| **DB** | PostgreSQL 16 + `pgvector` | Metadata, transkrip JSONB, token terenkripsi |
-| **Storage** | Cloudflare R2 (S3-compatible) | Egress gratis = krusial untuk distribusi klip; lifecycle rule native |
-| **STT** | `faster-whisper` (CTranslate2, int8), default `small` | Dijalankan di `worker-light`; model di-cache di volume persisten |
-| **Diarization** | ❌ **DITUNDA** (lihat §5.3) | `pyannote` terlalu berat di CPU. Diganti heuristik energi + gap |
+| **Frontend** | Next.js 15 (App Router, TS), Tailwind CSS | Uploader client-side; satu pengguna lokal |
+| **Upload** | `react-dropzone` + endpoint lokal per potongan | Resume via potongan yang sudah diterima server (`received_parts`) |
+| **API** | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), `sse-starlette` | Stateless; tidak pernah menyentuh FFmpeg dari event loop |
+| **Queue** | `ThreadPoolExecutor` per tahap (`clipper_shared.dispatcher`) | Pool: `ingest`, `stt`, `render`; ukuran pool = batas paralel |
+| **DB** | SQLite via `aiosqlite` (`output/clipper.db`) | Metadata, transkrip JSONB, token terenkripsi |
+| **Storage** | Disk lokal (`output/`) | Raw, render, overlay, font; klip final di `output/clips/` |
+| **STT** | `faster-whisper` (CTranslate2, int8), default `small` | Dijalankan di pool `stt`; model di-cache lokal |
+| **Diarization** | ❌ **DITUNDA** (lihat `technical-debt.md`) | `pyannote` terlalu berat di CPU. Diganti heuristik energi + gap |
 | **LLM Scoring** | Gemini 2.5 Flash (default), fallback Claude Haiku; structured JSON output | Prompt + skema Pydantic ketat; ada fallback heuristik lokal |
-| **Video** | FFmpeg **>= 7** (`libx264`, `libass`), OpenCV, MediaPipe, PySceneDetect, `boxmot`/ByteTrack | Subtitle dibakar sebagai **ASS karaoke** (`\k`), bukan overlay per-frame. WSL punya 8.0.1 — lihat `constraints.md` §3 |
+| **Video** | FFmpeg **>= 7** (`libx264`, `libass`), OpenCV, MediaPipe Face Landmarker | Subtitle dibakar sebagai ASS; lihat `constraints.md` §3 |
 | **Publishing** | ❌ Dihapus (D5). Unduh MP4 lalu unggah manual | — |
-| **YouTube** | `yt-dlp` + PO token provider + rotasi proxy residensial | Risiko IP block = risiko #3 di PRD |
-| **Infra** | Hetzner CCX (dedicated vCPU) + Dokploy + Traefik; GitHub Actions; Sentry | `cpu.max` cgroup per container; lihat §4 |
-| **Backup** | `pg_dump` harian → R2 + restore drill terjadwal | VPS tanpa backup teruji = satu disk gagal, semua hilang |
+| **YouTube** | `yt-dlp` + PO token provider | Maksimum resolusi 1080p; risiko IP block = risiko #3 di PRD |
 
 ### Penyimpangan sadar dari PRD §6
 
 | PRD menawarkan | Dipilih | Alasan |
 |---|---|---|
 | FastAPI **atau** Node.js | **FastAPI saja** | Pipeline AI seluruhnya Python; Node hanya menambah hop tanpa manfaat |
-| Celery / **BullMQ** | **Celery** | Worker berat adalah FFmpeg + model ML Python native; BullMQ memaksa Node worker yang harus shell-out ke Python |
-| "MediaPipe" polos | Reframing tanpa MediaPipe ASD | MediaPipe **tidak punya** active-speaker detection (lihat §5.2) |
+| Celery / **BullMQ** | **Thread pool in-process** (T9) | Satu mesin, satu pengguna; tidak ada broker yang perlu dijaga |
+| "MediaPipe" polos | MediaPipe tanpa ASD | MediaPipe **tidak punya** active-speaker detection |
 
 ### Aturan pin versi
 
 ```
-Python   : 3.12.x  (image container, base python:3.12-slim-bookworm)
-           3.14.6  (lokal Windows, .venv-win — T8)
+Python   : 3.12–3.14  (lokal Windows: 3.14.6 di .venv-win — T8/T9)
 FFmpeg   : >= 7.x  — WAJIB dengan libx264 DAN libass
                      (libass diperlukan untuk subtitle karaoke; banyak
                       paket FFmpeg distro tidak menyertakannya)
                      Lokal: build BtbN di .libs/ffmpeg/ (diunduh setup.cmd)
 Node     : 22 LTS  (khusus frontend; host 24 jalan dengan peringatan)
-Postgres : 16      (hanya deployment)
-Redis    : 7.2     (hanya deployment)
 ```
 
 Cek cepat: `ffmpeg -version | grep -E 'libx264|libass'` harus memunculkan keduanya.
@@ -132,11 +105,13 @@ Sumber: TECH_SPEC §2, §1.1; versi aktual dari probe host (`constraints.md`).
 
 ## 3. Skema Database
 
-Schema dikelola dengan **Alembic**, dibuat di **Sprint 0**. Semua tabel di bawah
-ini adalah daftar lengkapnya — tidak ada tabel lain di dokumen sumber.
+Skema dikelola oleh aplikasi **saat start** (`apps/api/app/db/session.py`):
+tabel dibuat, dan tabel yang skemanya tertinggal dari model dibangun ulang
+dengan datanya tetap utuh. **Tanpa Alembic** sejak T9 — tidak ada migrasi
+manual.
 
 ```
-users               (id, email, hashed_password, plan, created_at)
+users               (id, email, hashed_password, plan, created_at)   -- historis, tidak dipakai (satu pengguna lokal tanpa login)
 jobs                (id, user_id, source_type[upload|youtube], source_url,
                      status, stage, progress, error, created_at, updated_at)
 source_media        (id, job_id, r2_key, size_bytes, duration_s, codec,
@@ -152,21 +127,22 @@ subtitle_presets    (id, user_id, name, style JSONB)   -- warna, outline, box, p
 social_accounts     (id, user_id, platform, encrypted_token, refresh_token,
                      expires_at, scopes)                -- tidak dipakai (D5), dibiarkan
 scheduled_posts     (id, user_id, render_id, platform, caption, hashtags,
-                     scheduled_at, status)              -- schema-ready, belum aktif
+                     scheduled_at, status)              -- tidak dipakai (D5), dibiarkan
 job_events          (id, job_id, stage, message, payload JSONB, created_at)
 ```
 
-**Jumlah tabel: 10.** Nama tabel (urut abjad): `job_events`, `jobs`, `renders`,
-`scheduled_posts`, `segments`, `social_accounts`, `source_media`,
-`subtitle_presets`, `transcripts`, `users`.
+**Jumlah tabel di TECH_SPEC: 10.** Nama di kode sama persis; `r2_key`
+dipertahankan sebagai nama kolom/kunci meski nilainya kini menunjuk **berkas
+lokal** di `output/` (`clipper_shared.storage`). Di luar daftar itu, kode juga
+menambah tabel katalog: `ai_provider_settings`, `font_assets`,
+`overlay_assets`, `segment_overlays`.
 
 ### Ringkasan per tabel
 
 | Tabel | Peran | Kolom kunci |
 |---|---|---|
-| `users` | Akun & auth | `email`, `hashed_password`, `plan` |
 | `jobs` | Satu unit pekerjaan ingest→render | `status`, `stage`, `progress`, `error` |
-| `source_media` | Objek media mentah di R2 | `r2_key`, `upload_id`, **`expires_at`** (dasar retensi 48 jam) |
+| `source_media` | Media mentah di disk lokal | `r2_key`, `upload_id`, **`expires_at`** (dasar retensi 48 jam) |
 | `transcripts` | Hasil ASR | `words` JSONB (word-level), `speakers` JSONB, `model_used` |
 | `segments` | Segmen klip hasil scoring | `score`, `label`, `hook_score`, `completeness`, `emotional_arc`, `status` |
 | `renders` | Artefak render | `kind` (`preview`/`final`), `subtitle_style` JSONB, `preset` |
@@ -195,38 +171,45 @@ Sumber: TECH_SPEC §3.
 
 ## 4. Alur Data (end-to-end, ringkas)
 
-Deployment (A/B/C terpisah):
+1. Browser membuat job, lalu mengunggah media per potongan ke **API lokal**
+   (atau API mengunduh dari YouTube via `yt-dlp`).
+2. `jobs` row dibuat di SQLite; task `ingest` masuk pool `ingest`.
+3. `ingest`: resolve sumber (YouTube atau berkas yang sudah ada di disk),
+   normalisasi audio 16 kHz mono WAV + mezzanine.
+4. `transcribe`: STT (`faster-whisper`) → `transcripts` + `segments`.
+5. `analyze`: LLM scoring → `segments` siap direview.
+6. `render`: FFmpeg crop 9:16 + burn subtitle ASS → `renders` di `output/`.
+7. API mengirim progres via SSE (`job_events`) ke Review Studio.
+8. Export final on-demand → berkas di `output/clips/`, diunduh pengguna.
+   `POST /jobs` menolak dengan 422 bila penyedia AI belum siap (cek
+   `resolve_provider` yang sama dengan worker).
 
-1. Browser minta presigned multipart ke **A** → upload part langsung ke **R2**
-   (bypass API server).
-2. `jobs` row dibuat di Postgres; task `ingest` masuk Redis.
-3. **B** (`worker-light`): resolve sumber (YouTube via `yt-dlp` atau R2),
-   normalisasi audio 16 kHz mono WAV + mezzanine, lalu STT + LLM scoring.
-4. Hasil → `transcripts` + `segments`.
-5. **C** (`worker-render`): FFmpeg crop 9:16 + burn ASS karaoke → `renders`.
-6. **A** mengirim progres via SSE (`job_events`) ke Review Studio.
-7. Export final on-demand → presigned download URL dari R2.
-
-Lokal Standalone: urutan tahapnya sama, tetapi job disimpan di SQLite, task
-dijalankan thread pool di proses API, storage di `output/`, dan klip akhir
-ditulis ke `output/clips/`. `POST /jobs` menolak dengan 422 bila penyedia AI
-belum siap (cek `resolve_provider` yang sama dengan worker).
-
-Sumber: TECH_SPEC §1, §2, §3, §6.
+Sumber: TECH_SPEC §1, §2, §3, §6; `apps/web/app/jobs/[id]/page.tsx`.
 
 ---
 
-## 5. BELUM DITENTUKAN
+## 5. Riwayat (dibatalkan oleh T9)
 
-- **BELUM DITENTUKAN** — Spesifikasi VPS Hetzner (vCPU/RAM/tipe instance);
-  menentukan `RENDER_SLOTS` dan aman-tidaknya 1 render + 1 STT paralel.
+Desain awal memakai **3 container** (A: API + auth + presign; B: worker-light
+untuk ingest/STT/scoring; C: worker-render untuk FFmpeg/MediaPipe) dengan
+PostgreSQL 16 + Redis 7 sebagai broker, Cloudflare R2 sebagai storage
+(presigned multipart upload), queue bernama `ingest`/`transcribe`/`analyze`/
+`render`/`maintenance`, dan beat untuk retensi. Rencana itu **dibatalkan
+seluruhnya oleh T9**: mode distributed dihapus dari kode, dan arsitektur yang
+berlaku adalah satu proses lokal di atas SQLite + disk.
+
+Sumber: TECH_SPEC §1 (mode terdistribusi); `decisions.md` D3, T2, T9.
+
+---
+
+## 6. BELUM DITENTUKAN
+
+- **BELUM DITENTUKAN** — Nilai `RENDER_SLOTS`/`STT_SLOTS` final untuk host ini.
 - **BELUM DITENTUKAN** — Penyedia & anggaran proxy residensial untuk ingest YouTube.
 - **BELUM DITENTUKAN** — Anggaran LLM scoring (Gemini Flash vs Haiku sebagai default,
   panjang transkrip per permintaan).
 - **BELUM DITENTUKAN** — Model bisnis/tier dan perlu-tidaknya watermark.
 - **BELUM DITENTUKAN** — Skema key management/KMS konkret untuk AES-256-GCM
   (hanya disebut "key dari env/KMS").
-- **BELUM DITENTUKAN** — Cara memasang Docker di mesin deployment/CI agar
-  `docker-compose.yml` diuji eksekusi. Development lokal tidak butuh Docker (T8).
 
-Sumber: TECH_SPEC §8, §4.1, §3; probe host (`constraints.md` §4); T8.
+Sumber: TECH_SPEC §8, §3; probe host (`constraints.md`); T9.

@@ -16,13 +16,14 @@ dipertahankan dalam Bahasa Inggris. Setiap file mencantumkan rujukan bagian
 > halaman ini.**
 
 Kode sudah diimplementasikan: `apps/api/`, `apps/worker-light/`,
-`apps/worker-render/`, `packages/shared/`, `apps/web/`, plus `pyproject.toml`,
-`docker-compose.yml`, dan CI workflow. `docs/memory/` berisi **7 file memori + index ini**.
+`apps/worker-render/`, `packages/shared/`, `apps/web/`, plus `pyproject.toml`
+dan CI workflow (`.github/workflows/ci.yml`). `docs/memory/` berisi **7 file
+memori + index ini**.
 
-**Menjalankan lokal (T8):** `npm run dev` atau klik dua kali `start.cmd` di root
-repo. Selalu Windows Standalone — SQLite `output/clipper.db`, worker di dalam
-proses API, tanpa PostgreSQL/Redis/Celery/WSL/Docker. Setup otomatis lewat
-`scripts/setup.cmd`. PostgreSQL + Redis + Celery hanya untuk deployment VPS (D3).
+**Menjalankan lokal (T8/T9):** `npm run dev` atau klik dua kali `start.cmd` di
+root repo. Selalu Windows Standalone — SQLite `output/clipper.db`, worker di
+dalam proses API, tanpa PostgreSQL/Redis/Celery/WSL/Docker. Setup otomatis lewat
+`scripts/setup.cmd`. Tidak ada Docker/VPS/container sama sekali (T9).
 
 **Konsekuensi terhadap D4:** keputusan **D4** ("hanya dokumen, tanpa scaffold
 kode") **sudah tidak berlaku**; rujukan sejarahnya tetap ada di `decisions.md`.
@@ -34,9 +35,9 @@ kode") **sudah tidak berlaku**; rujukan sejarahnya tetap ada di `decisions.md`.
 | File | Isi | Kapan dibaca |
 |---|---|---|
 | [`project-overview.md`](./project-overview.md) | Tujuan produk, persona, user journey, 4 modul FR, status FR-1.1 s/d FR-4.3 | Pertama kali. Sebelum menyentuh apa pun, untuk tahu *apa* yang dibangun. |
-| [`architecture.md`](./architecture.md) | Diagram 3-container (deployment), mode lokal Standalone, tech stack final, skema DB lengkap + indeks wajib | Sebelum menulis kode backend/worker atau migrasi DB. |
-| [`decisions.md`](./decisions.md) | ADR D1–D5 + 8 keputusan turunan (T1–T8) | Sebelum mengusulkan perubahan desain. Kalau keputusan sudah ada di sini, jangan dibuka ulang tanpa alasan baru. |
-| [`constraints.md`](./constraints.md) | Kondisi host hasil probe, aturan pin versi, QoS container, daftar FORBIDDEN | Sebelum menjalankan apa pun secara lokal. |
+| [`architecture.md`](./architecture.md) | Arsitektur lokal satu proses, tech stack final, skema DB lengkap + indeks wajib | Sebelum menulis kode backend/worker atau menyentuh skema DB. |
+| [`decisions.md`](./decisions.md) | ADR D1–D5 + keputusan turunan (T1–T9) | Sebelum mengusulkan perubahan desain. Kalau keputusan sudah ada di sini, jangan dibuka ulang tanpa alasan baru. |
+| [`constraints.md`](./constraints.md) | Kondisi host hasil probe, aturan versi, batas paralel lokal, daftar FORBIDDEN | Sebelum menjalankan apa pun secara lokal. |
 | [`metrics.md`](./metrics.md) | OKR PRD §1.3 vs metrik pengganti TECH_SPEC §0.1 + angka transkripsi CPU | Sebelum membuat klaim performa atau menyetel ekspektasi produk/UI. |
 | [`technical-debt.md`](./technical-debt.md) | Tabel utang teknis TECH_SPEC §5.3 + catatan diarization/MediaPipe ASD | Saat memprioritaskan backlog atau menjawab "kenapa X belum ada?". |
 | [`references.md`](./references.md) | Sumber eksternal terverifikasi + nilai tuning siap pakai | **Sebelum menulis kode Sprint 2–3** (reframing, subtitle ASS, parsing LLM). |
@@ -47,13 +48,13 @@ kode") **sudah tidak berlaku**; rujukan sejarahnya tetap ada di `decisions.md`.
 
 1. **`project-overview.md`** — pahami produk, persona, dan alur end-to-end.
 2. **`constraints.md`** — pahami apa yang **tidak boleh** dilakukan (mis.
-   menyalakan Postgres/Redis untuk dev lokal, menganggap test di Python 3.14
-   sebagai bukti image produksi). File ini memuat koreksi environment
+   menyalakan Postgres/Redis untuk dev lokal, menjalankan render di luar
+   `clipper_shared.dispatcher`). File ini memuat koreksi environment
    terverifikasi yang mengalahkan TECH_SPEC §1.1.
-3. **`decisions.md`** — pahami keputusan yang sudah dikunci (D1–D5, T1–T8)
+3. **`decisions.md`** — pahami keputusan yang sudah dikunci (D1–D5, T1–T9)
    beserta konsekuensinya, supaya tidak mengusulkan ulang hal yang sudah ditolak.
-4. **`architecture.md`** — pahami 3-container (deployment), mode lokal
-   Standalone, tech stack, dan skema DB.
+4. **`architecture.md`** — pahami arsitektur lokal satu proses, tech stack, dan
+   skema DB.
 5. **`metrics.md`** — pahami bahwa target OKR kecepatan PRD **tidak tercapai**
    dan angka apa yang dipakai sebagai gantinya.
 6. **`technical-debt.md`** — pahami utang teknis yang sudah dicatat agar tidak
