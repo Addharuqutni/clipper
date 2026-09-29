@@ -53,6 +53,7 @@ from worker_render.reframe_eval import (  # noqa: E402
     ClipLabel,
     DatasetReport,
     evaluate_clip,
+    is_out_of_range,
     load_labels,
 )
 from worker_render.reframer import (  # noqa: E402
@@ -146,15 +147,16 @@ def evaluate_dataset(
             source_width=info.width,
             source_height=info.height,
             crop_w=crop_w,
+            duration_s=info.duration_s,
             tracking_health=health,
             margin_frac=margin_frac,
         )
 
-        # Keyframe di luar durasi dihitung MISS (crop pada frame itu tidak ada).
+        # Keyframe di luar durasi/lintasan dihitung MISS oleh evaluate_clip.
         # Dilaporkan agar label yang salah waktu cepat terlihat, bukan seolah
         # pelacakan yang gagal.
         for score in evaluation.scores:
-            if score.t >= info.duration_s:
+            if is_out_of_range(score.t, fps=info.fps, frame_count=len(positions), duration_s=info.duration_s):
                 print(
                     f"    ! keyframe t={score.t:.3f}s melewati durasi klip "
                     f"({info.duration_s:.3f}s) — dihitung MISS.",

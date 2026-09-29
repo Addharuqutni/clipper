@@ -267,11 +267,15 @@ class TestEvaluateClip:
         assert evaluation.hits == 1
         assert evaluation.scores[0].crop_x == (SOURCE_W - CROP_W) // 2
 
-    def test_keyframe_di_luar_durasi_lintasan_dihitung_miss(self) -> None:
-        """Label yang salah waktu tidak boleh membuat skrip crash."""
+    def test_keyframe_di_luar_lintasan_dihitung_miss_walau_crop_terakhir_mencakup_wajah(self) -> None:
+        """Frame terakhir mencakup cx=0.5, tetapi t=99 tidak punya crop → MISS.
+
+        Menjepit ke frame terakhir akan membuat label yang salah waktu
+        menaikkan presisi yang dilaporkan.
+        """
         from worker_render.reframe_eval import evaluate_clip
 
-        label = self._label((99.0, 0.5))
+        label = self._label((0.0, 0.5), (99.0, 0.5))
         evaluation = evaluate_clip(
             label,
             positions=[657, 657],
@@ -280,10 +284,41 @@ class TestEvaluateClip:
             source_height=1080,
             crop_w=CROP_W,
         )
-        # Frame terakhir masih crop 657 dan cx 0.5 ada di dalamnya → HIT, tetapi
-        # yang penting: tidak ada exception dan jumlahnya konsisten.
-        assert evaluation.keyframes_total == 1
-        assert evaluation.precision == 1.0
+        assert evaluation.keyframes_total == 2
+        assert [s.hit for s in evaluation.scores] == [True, False]
+        assert not evaluation.scores[1].margin_hit
+        assert evaluation.precision == 0.5
+
+    def test_batas_lintasan_frame_terakhir_masih_dinilai(self) -> None:
+        """10 fps, 4 frame: t=0.3 → frame 3 (ada), t=0.4 → frame 4 (tidak ada)."""
+        from worker_render.reframe_eval import evaluate_clip
+
+        label = self._label((0.3, 0.5), (0.4, 0.5))
+        evaluation = evaluate_clip(
+            label,
+            positions=[657, 657, 657, 657],
+            fps=10.0,
+            source_width=SOURCE_W,
+            source_height=1080,
+            crop_w=CROP_W,
+        )
+        assert [s.hit for s in evaluation.scores] == [True, False]
+
+    def test_tanpa_wajah_keyframe_melewati_durasi_dihitung_miss(self) -> None:
+        """Crop tengah statis berlaku di seluruh klip, tetapi tidak sesudah klip berakhir."""
+        from worker_render.reframe_eval import evaluate_clip
+
+        label = self._label((1.0, 0.5), (5.0, 0.5))
+        evaluation = evaluate_clip(
+            label,
+            positions=[],
+            fps=30.0,
+            source_width=SOURCE_W,
+            source_height=1080,
+            crop_w=CROP_W,
+            duration_s=5.0,
+        )
+        assert [s.hit for s in evaluation.scores] == [True, False]
 
 
 class TestLoadLabels:

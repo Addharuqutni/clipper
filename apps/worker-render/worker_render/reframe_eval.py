@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 #: Nama berkas label di dalam direktori dataset.
@@ -367,10 +367,16 @@ def evaluate_clip(
     source_width: int,
     source_height: int,
     crop_w: int,
+    duration_s: float | None = None,
     tracking_health: str = "",
     margin_frac: float = DEFAULT_MARGIN_FRAC,
 ) -> ClipEvaluation:
     """Nilai seluruh keyframe satu klip terhadap lintasan crop hasil reframer.
+
+    Keyframe yang jatuh di luar lintasan (``t * fps >= len(positions)``) atau di
+    luar ``duration_s`` dihitung **MISS**: tidak ada crop yang bisa dinilai di
+    sana. Menjepitnya ke frame terakhir akan menilai crop yang tidak pernah
+    tampil pada detik itu, dan label yang salah waktu justru menaikkan presisi.
 
     Args:
         label: Label klip (nama + keyframe).
@@ -381,14 +387,17 @@ def evaluate_clip(
         source_width: Lebar sumber dalam piksel.
         source_height: Tinggi sumber dalam piksel (untuk laporan).
         crop_w: Lebar crop 9:16 untuk sumber ini (``crop_width_for``).
+        duration_s: Durasi klip hasil probe; keyframe pada/sesudahnya MISS.
+            Satu-satunya batas bila ``positions`` kosong (crop tengah statis).
         tracking_health: Ringkasan kesehatan pelacakan dari reframer.
         margin_frac: Total lebar crop yang dibuang dari kedua tepi untuk HIT
             bermargin (bawaan 0,2 = wajah di dalam 80% tengah crop).
     """
     no_face = len(positions) == 0
     fallback_x = centered_crop_x(source_width, crop_w)
-    scores = tuple(
-        score_keyframe(
+
+    def score(keyframe: KeyframeLabel) -> KeyframeScore:
+        result = score_keyframe(
             keyframe.cx,
             t=keyframe.t,
             crop_x=fallback_x if no_face else sample_crop_x(positions, fps, keyframe.t),
@@ -396,8 +405,10 @@ def evaluate_clip(
             source_width=source_width,
             margin_frac=margin_frac,
         )
-        for keyframe in label.keyframes
-    )
+        if is_out_of_range(keyframe.t, fps=fps, frame_count=len(positions), duration_s=duration_s):
+            return replace(result, hit=False, margin_hit=False)
+        return result
+
     return ClipEvaluation(
         clip=label.clip,
         source_width=source_width,
@@ -406,5 +417,16 @@ def evaluate_clip(
         crop_w=crop_w,
         tracking_health=tracking_health,
         no_face=no_face,
-        scores=scores,
+        scores=tuple(score(keyframe) for keyframe in label.keyframes),
     )
+
+
+def is_out_of_range(t: float, *, fps: float, frame_count: int, duration_s: float | None) -> bool:
+    """Keyframe ``t`` tidak punya crop untuk dinilai (di luar lintasan/durasi).
+
+    ``frame_count`` 0 berarti tidak ada lintasan (crop tengah statis berlaku di
+    seluruh klip), sehingga hanya ``duration_s`` yang membatasi.
+    """
+    if duration_s is not None and t >= duration_s:
+        return True
+    return frame_count > 0 and int(t * fps + 1e-6) >= frame_count
