@@ -196,7 +196,7 @@ async def cancel_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
         await db.execute(
             update(Render)
             .where(Render.segment_id.in_(segment_ids), Render.status.in_(["queued", "running"]))
-            .values(status="failed")
+            .values(status="canceled")
         )
         await db.commit()
         await db.refresh(job)

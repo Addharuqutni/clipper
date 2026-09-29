@@ -162,6 +162,35 @@ describe("Halaman detail job (Review Studio)", () => {
     expect(screen.getByRole("button", { name: "Analisis ulang" })).toBeDefined();
   });
 
+  it("render final dibatalkan pengguna tidak tampil sebagai 'Render gagal'; render yang benar-benar gagal tetap tampil", async () => {
+    const canceledJob = makeJob({ status: "canceled", stage: "render", progress: 80, error: "Dibatalkan pengguna." });
+    const segment = makeSegment();
+    const finalRender = (status: Render["status"]): Render => ({
+      id: `render-${status}`,
+      segment_id: segment.id,
+      kind: "final",
+      r2_key: null,
+      preset: null,
+      status,
+      duration_ms: null,
+      size_bytes: null,
+      created_at: "2026-09-29T01:00:00Z",
+      crop_mode: "face_track",
+    });
+
+    installFetchStub(jobRoutes({ job: canceledJob, segments: [segment], renders: [finalRender("canceled")] }));
+    const view = renderJobPage();
+    expect(await screen.findByRole("heading", { name: "Hook pembuka yang kuat" })).toBeDefined();
+    expect(screen.queryByText("Render gagal")).toBeNull();
+    // Klip bisa dirender lagi setelah dibatalkan.
+    expect(screen.getByRole("button", { name: "Render ulang" })).toBeDefined();
+    view.unmount();
+
+    installFetchStub(jobRoutes({ job: makeJob({ status: "done", stage: "done", progress: 100 }), segments: [segment], renders: [finalRender("failed")] }));
+    renderJobPage();
+    expect(await screen.findByText("Render gagal")).toBeDefined();
+  });
+
   it("job gagal: pesan error job tampil utuh dan Proses ulang tersedia", async () => {
     const failed = makeJob({
       status: "failed",

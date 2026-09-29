@@ -75,7 +75,7 @@ export interface SocialCaption {
 }
 export interface Render {
   id: string; segment_id: string; kind: RenderKind; r2_key: string | null;
-  preset: string | null; status: "queued" | "running" | "done" | "failed";
+  preset: string | null; status: "queued" | "running" | "done" | "failed" | "canceled";
   duration_ms: number | null; size_bytes: number | null; created_at: string;
   /** Mode reframing yang dipakai render ini (migrasi 0002). */
   crop_mode: CropMode;

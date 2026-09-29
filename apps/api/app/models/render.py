@@ -34,8 +34,9 @@ if TYPE_CHECKING:
 #: TECH_SPEC §3: kind[preview|final]
 RENDER_KINDS: tuple[str, ...] = ("preview", "final")
 
-#: queued|running|done|failed
-RENDER_STATUSES: tuple[str, ...] = ("queued", "running", "done", "failed")
+#: queued|running|done|failed|canceled — ``canceled`` = dihentikan pengguna,
+#: bukan kegagalan (UI tidak menampilkannya sebagai "Render gagal").
+RENDER_STATUSES: tuple[str, ...] = ("queued", "running", "done", "failed", "canceled")
 
 #: Mode reframing (lihat clipper_shared.reframe.CropMode). Disimpan per render
 #: karena mode yang berbeda mengubah geometri keluaran secara fundamental, dan
@@ -83,7 +84,7 @@ class Render(Base):
 
     __table_args__ = (
         CheckConstraint("kind IN ('preview', 'final')", name="kind_valid"),
-        CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="status_valid"),
+        CheckConstraint("status IN ('queued', 'running', 'done', 'failed', 'canceled')", name="status_valid"),
         CheckConstraint(
             "crop_mode IN ('face_track', 'black_bars', 'blurred_fill')",
             name="crop_mode_valid",

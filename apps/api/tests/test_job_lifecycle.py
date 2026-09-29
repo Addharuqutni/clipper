@@ -139,6 +139,39 @@ def test_batal_dan_hapus(client: TestClient) -> None:
     assert client.get(f"/api/v1/jobs/{job_id}").status_code == 404
 
 
+def test_cancel_menandai_render_aktif_canceled_bukan_failed(client: TestClient) -> None:
+    """Render yang dihentikan pengguna bukan kegagalan: UI tidak boleh menampilkan 'Render gagal'."""
+    import uuid
+
+    from clipper_shared.db import get_db_connection
+
+    job_id = _create_upload_job(client)
+    segment_id = str(uuid.uuid4())
+    render_ids = {status: str(uuid.uuid4()) for status in ("queued", "running", "done", "failed")}
+    with get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE jobs SET status = 'running', stage = 'render' WHERE id = %s", (job_id,))
+        cur.execute(
+            "INSERT INTO segments (id, job_id, start_s, end_s, score, status) VALUES (%s, %s, 0, 30, 0.9, 'proposed')",
+            (segment_id, job_id),
+        )
+        for status, render_id in render_ids.items():
+            cur.execute(
+                "INSERT INTO renders (id, segment_id, kind, status, crop_mode) VALUES (%s, %s, 'final', %s, 'face_track')",
+                (render_id, segment_id, status),
+            )
+
+    assert client.post(f"/api/v1/jobs/{job_id}/cancel").json()["status"] == "canceled"
+
+    statuses = {r["id"]: r["status"] for r in client.get(f"/api/v1/jobs/{job_id}/renders").json()["items"]}
+    assert statuses == {
+        render_ids["queued"]: "canceled",
+        render_ids["running"]: "canceled",
+        # Hasil yang sudah final tidak disentuh.
+        render_ids["done"]: "done",
+        render_ids["failed"]: "failed",
+    }
+
+
 def test_sse_job_selesai_langsung_mengirim_end(client: TestClient) -> None:
     from clipper_shared.db import get_db_connection
 

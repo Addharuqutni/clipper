@@ -13,7 +13,7 @@ import os
 import re
 import shutil
 import uuid
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -309,15 +309,10 @@ def _finish_job_status(job_id: str) -> None:
         )
         latest = dict(cursor.fetchall())  # baris terurut waktu: yang terakhir menang
 
-    statuses = list(latest.values())
-    pending = sum(s in {"queued", "running"} for s in statuses)
-    done = statuses.count("done")
-    failed = statuses.count("failed")
-    total = len(statuses)
-
-    if pending:
-        emit(job_id, "running", "render", 75 + int(25 * (done + failed) / max(total, 1)) - 1,
-             f"{done + failed}/{total} klip selesai dirender")
+    summary = _render_summary(list(latest.values()))
+    if summary.pending:
+        emit(job_id, "running", "render", 75 + int(25 * summary.finished / max(summary.total, 1)) - 1,
+             f"{summary.finished}/{summary.total} klip selesai dirender")
         return
 
     # Render terakhir selesai: hitung mundur 48 jam retensi media mentah dari sini.
@@ -326,12 +321,48 @@ def _finish_job_status(job_id: str) -> None:
     with get_db_connection() as connection, connection.cursor() as cursor:
         cursor.execute("UPDATE source_media SET expires_at = %s WHERE job_id = %s", (raw_media_expiry(), job_id))
 
-    if done == 0:
-        emit(job_id, "failed", "render", 0, f"Semua {failed} render gagal. Lihat log untuk detail.")
-    elif failed:
-        emit(job_id, "done", "done", 100, f"{done} klip selesai, {failed} gagal (bisa dirender ulang).")
-    else:
-        emit(job_id, "done", "done", 100, f"{done} klip selesai.")
+    status, message = summary.final_outcome()
+    emit(job_id, status, "done" if status == "done" else "render", 100 if status == "done" else 0, message)
+
+
+@dataclass(frozen=True, slots=True)
+class _RenderSummary:
+    """Ringkasan render terbaru per segmen, tanpa render yang dibatalkan.
+
+    Render ``canceled`` dihentikan pengguna: bukan hasil, bukan kegagalan. Ia
+    dikeluarkan dari ``total`` juga — kalau tidak, segmen yang dibatalkan
+    ikut menjadi penyebut dan pesan akhir berbunyi "0 render gagal".
+    """
+
+    pending: int
+    done: int
+    failed: int
+
+    @property
+    def finished(self) -> int:
+        return self.done + self.failed
+
+    @property
+    def total(self) -> int:
+        return self.pending + self.finished
+
+    def final_outcome(self) -> tuple[str, str]:
+        """Status dan pesan job setelah tidak ada render yang tertunda."""
+        if self.done and self.failed:
+            return "done", f"{self.done} klip selesai, {self.failed} gagal (bisa dirender ulang)."
+        if self.done:
+            return "done", f"{self.done} klip selesai."
+        if self.failed:
+            return "failed", f"Semua {self.failed} render gagal. Lihat log untuk detail."
+        return "done", "Tidak ada klip yang dirender (semua render dibatalkan)."
+
+
+def _render_summary(statuses: list[str]) -> _RenderSummary:
+    return _RenderSummary(
+        pending=sum(s in {"queued", "running"} for s in statuses),
+        done=statuses.count("done"),
+        failed=statuses.count("failed"),
+    )
 
 
 # --- Task -------------------------------------------------------------------
