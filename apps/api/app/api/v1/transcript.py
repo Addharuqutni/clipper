@@ -29,8 +29,9 @@ from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.v1.auth import CurrentUserOrDev, DbSession, get_owned_job
+from app.api.v1.auth import CurrentUserOrDev, DbSession
 from app.models.transcript import Transcript
+from app.services.jobs import get_owned_job
 
 router = APIRouter()
 

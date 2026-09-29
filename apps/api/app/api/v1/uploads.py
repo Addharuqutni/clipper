@@ -33,11 +33,12 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.v1.auth import CurrentUserOrDev, DbSession, get_owned_job
+from app.api.v1.auth import CurrentUserOrDev, DbSession
 from app.core.config import settings
 from app.core.storage import build_raw_key
 from app.models.job import Job
 from app.models.source_media import SourceMedia
+from app.services.jobs import get_owned_job
 
 router = APIRouter()
 
