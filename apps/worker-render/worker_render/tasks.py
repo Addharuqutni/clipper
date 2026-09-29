@@ -252,7 +252,15 @@ def _store_render(segment_id: str, kind: str, path: Path, *, job_id: str, label:
     human.unlink(missing_ok=True)
     try:
         os.link(target, human)
-    except OSError:
+    except OSError as exc:
+        # Salinan penuh memakan ruang disk dua kali; tanpa jejak di log, klip
+        # ganda di output/clips tidak bisa dijelaskan belakangan.
+        logger.warning(
+            "Hard link %s -> %s gagal (%s); membuat salinan penuh (memakan ruang disk tambahan).",
+            target,
+            human,
+            exc,
+        )
         shutil.copy2(target, human)
     return key
 
