@@ -21,7 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
 
-from clipper_shared.processes import kill_process_tree, spawn, unregister, wait_with_cancel
+from clipper_shared.processes import (
+    POLL_INTERVAL_S,
+    kill_process_tree,
+    spawn,
+    unregister,
+    wait_with_cancel,
+)
 from clipper_shared.storage import binary
 from clipper_shared.worker_events import JobCanceled, is_canceled
 
@@ -187,8 +193,8 @@ def iter_video_frames(
     ``start_s``. Hal yang sama pada jalur ``-c copy`` TIDAK akurat (hanya bisa
     mulai di keyframe), jadi jangan pakai parameter ini untuk copy.
 
-    ``job_id`` mendaftarkan proses ini agar pembatalan job memutusnya; setiap
-    frame juga diperiksa terhadap pembatalan.
+    ``job_id`` mendaftarkan proses ini agar pembatalan job memutusnya; pembacaan
+    frame juga memeriksa pembatalan paling sering sekali per ``POLL_INTERVAL_S``.
 
     Raises:
         JobCanceled: job dibatalkan saat pembacaan frame berlangsung.
@@ -226,15 +232,19 @@ def iter_video_frames(
             process.kill()
             raise RuntimeError("Gagal menyiapkan pipa stdout FFmpeg untuk pembacaan frame.")
 
+        next_check = time.monotonic() + POLL_INTERVAL_S
         while True:
             frame = process.stdout.read(frame_bytes)
             if len(frame) < frame_bytes:
                 break
             # Pelacakan wajah membaca ribuan frame dalam sekali panggilan;
             # tanpa pemeriksaan di sini pembatalan baru terlihat setelah
-            # seluruh segmen selesai dilacak.
-            if job_id is not None and is_canceled(job_id):
-                raise JobCanceled(job_id)
+            # seluruh segmen selesai dilacak. Dibatasi per waktu: memeriksa tiap
+            # frame berarti satu koneksi SQLite per frame (±1.800 per menit video).
+            if job_id is not None and time.monotonic() >= next_check:
+                if is_canceled(job_id):
+                    raise JobCanceled(job_id)
+                next_check = time.monotonic() + POLL_INTERVAL_S
             yield frame
         # Proses bisa mati karena dimatikan API (balapan dengan poll di atas);
         # sebagian frame tidak boleh dianggap sebagai hasil yang sah.
