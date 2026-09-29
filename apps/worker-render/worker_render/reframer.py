@@ -47,6 +47,21 @@ logger = logging.getLogger(__name__)
 _TEMP_COMMANDS = "crop_positions.txt"
 _TEMP_SUBS = "captions.ass"
 
+#: Lebar maksimum frame analisis pelacakan wajah. Detektor wajah MediaPipe
+#: bekerja pada input 128–256 px dan landmark pada potongan wajah 192 px, jadi
+#: frame 1080p penuh tidak menambah akurasi — hanya biaya dekode, pipa, dan
+#: salinan per frame. Landmark ternormalisasi (0..1) sehingga posisi crop tetap
+#: dihitung pada ukuran sumber.
+ANALYSIS_MAX_WIDTH = 640
+
+
+def analysis_size(width: int, height: int, max_width: int = ANALYSIS_MAX_WIDTH) -> tuple[int, int]:
+    """Ukuran frame analisis: rasio aspek sumber, lebar <= ``max_width``, genap."""
+    if width <= max_width:
+        return width, height
+    scaled_height = max(2, round(height * max_width / width / 2) * 2)
+    return max_width, scaled_height
+
 
 @dataclass
 class SourceInfo:
@@ -247,12 +262,13 @@ def compute_crop_positions(
     last_frame = int(duration * info.fps) if duration > 0 else info.frame_count
     positions: list[int] = []
     frame_index = 0
+    frame_w, frame_h = analysis_size(info.width, info.height)
 
     with FaceTracker(face_model_path or default_model_path()) as tracker:
         for frame in iter_video_frames(
             path,
-            width=info.width,
-            height=info.height,
+            width=frame_w,
+            height=frame_h,
             start_s=start_s,
             duration_s=duration,
             job_id=job_id,
@@ -264,10 +280,12 @@ def compute_crop_positions(
 
             faces = tracker.detect(
                 frame,
-                frame_width=info.width,
-                frame_height=info.height,
+                frame_width=frame_w,
+                frame_height=frame_h,
                 frame_index=frame_index,
                 fps=info.fps,
+                source_width=info.width,
+                source_height=info.height,
             )
             subject = choose_subject(
                 faces,

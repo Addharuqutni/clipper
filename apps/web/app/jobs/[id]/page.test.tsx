@@ -6,7 +6,8 @@
 // alasannya lewat `note` pada daftar segmen, dan catatan itu harus tampil
 // apa adanya — termasuk nama tahap yang tersimpan di basis data
 // ("ingest", "transcribe", "analyze", ...).
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import JobPage from "@/app/jobs/[id]/page";
 import { emitStatus, installEventSourceStub, installFetchStub, jsonResponse, type Routes } from "@/lib/test/halaman";
@@ -35,6 +36,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     stage: "upload",
     progress: 0,
     clip_count: 5,
+    language: "id",
     error: null,
     created_at: "2026-09-29T00:00:00Z",
     updated_at: "2026-09-29T00:00:00Z",
@@ -240,5 +242,70 @@ describe("Halaman detail job (Review Studio)", () => {
     // Data segmen belum ada: skeleton, bukan tabel.
     expect(document.querySelector(".skeleton")).not.toBeNull();
     expect(await screen.findByText("Diproses · 20%")).toBeDefined();
+  });
+
+  describe("aksi yang mengganti/menghapus data meminta konfirmasi", () => {
+    const done = () => makeJob({ status: "done", stage: "done", progress: 100 });
+    const DISPATCH_PATH = `POST /api/v1/jobs/${JOB_ID}/dispatch`;
+    const RESCORE_PATH = `POST /api/v1/jobs/${JOB_ID}/rescore`;
+    const DELETE_PATH = `DELETE /api/v1/jobs/${JOB_ID}`;
+
+    it.each([
+      ["Proses ulang", DISPATCH_PATH, /Transkrip, termasuk koreksi teks/],
+      ["Analisis ulang", RESCORE_PATH, /Transkrip dan koreksi teks tetap dipertahankan/],
+      ["Hapus", DELETE_PATH, /tidak bisa dibatalkan/],
+    ])("%s: Batal dan Esc tidak mengirim permintaan apa pun", async (label, path, consequence) => {
+      const user = userEvent.setup();
+      const stub = installFetchStub(jobRoutes({ job: done() }));
+      renderJobPage();
+
+      await user.click(await screen.findByRole("button", { name: label }));
+      const dialog = screen.getByRole("alertdialog");
+      expect(within(dialog).getByText(consequence)).toBeDefined();
+      // Fokus awal di Batal: Enter tak sengaja tidak menjalankan aksi.
+      expect(within(dialog).getByRole("button", { name: "Batal" })).toHaveFocus();
+
+      await user.click(within(dialog).getByRole("button", { name: "Batal" }));
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: label }));
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+
+      expect(stub.calls).not.toContain(path);
+    });
+
+    it.each([
+      ["Proses ulang", "Ya, proses ulang", DISPATCH_PATH],
+      ["Analisis ulang", "Ya, analisis ulang", RESCORE_PATH],
+    ])("%s: permintaan baru dikirim setelah disetujui", async (label, confirm, path) => {
+      const user = userEvent.setup();
+      const routes = jobRoutes({ job: done() });
+      routes[path] = () => jsonResponse(makeJob({ status: "queued", stage: "ingest" }));
+      const stub = installFetchStub(routes);
+      renderJobPage();
+
+      await user.click(await screen.findByRole("button", { name: label }));
+      await user.click(screen.getByRole("button", { name: confirm }));
+
+      await waitFor(() => expect(stub.calls).toContain(path));
+      expect(stub.calls.filter((call) => call === path)).toHaveLength(1);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+
+    it("Hapus: disetujui → job dihapus lalu kembali ke dashboard", async () => {
+      const user = userEvent.setup();
+      pushMock.mockClear();
+      const routes = jobRoutes({ job: done() });
+      routes[DELETE_PATH] = () => new Response(null, { status: 204 });
+      const stub = installFetchStub(routes);
+      renderJobPage();
+
+      await user.click(await screen.findByRole("button", { name: "Hapus" }));
+      await user.click(screen.getByRole("button", { name: "Hapus permanen" }));
+
+      await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
+      expect(stub.calls).toContain(DELETE_PATH);
+    });
   });
 });

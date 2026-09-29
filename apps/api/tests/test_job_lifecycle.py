@@ -62,6 +62,22 @@ def test_url_youtube_dikanonikkan_dan_opsi_ditolak(client: TestClient, submitted
     assert submitted[-1][0] == "worker_light.tasks.ingest_media"
 
 
+def test_bahasa_job_bawaan_id_dan_pilihan_tersimpan(client: TestClient) -> None:
+    """Bawaan 'id' (deteksi otomatis sering salah bahasa); 'auto' disimpan eksplisit."""
+    from clipper_shared.db import get_db_connection
+
+    default = client.post("/api/v1/jobs", json={"source_type": "upload"}).json()
+    auto = client.post("/api/v1/jobs", json={"source_type": "upload", "language": "auto"}).json()
+    english = client.post("/api/v1/jobs", json={"source_type": "upload", "language": "en"}).json()
+    assert (default["language"], auto["language"], english["language"]) == ("id", "auto", "en")
+
+    with get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT language FROM jobs WHERE id = %s", (auto["id"],))
+        assert cur.fetchone()[0] == "auto"
+
+    assert client.post("/api/v1/jobs", json={"source_type": "upload", "language": "fr"}).status_code == 422
+
+
 def test_unggahan_resume_lalu_complete_memulai_ingest(client: TestClient, submitted: list[tuple[Any, ...]]) -> None:
     from app.core.config import settings
 

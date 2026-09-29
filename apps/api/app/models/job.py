@@ -59,6 +59,14 @@ class Job(Base):
     #: sebagai ``target_count``; disimpan di sini agar tidak perlu dioper
     #: manual lewat setiap ``send_task`` di rantai ingest → transcribe → score.
     clip_count: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    #: Bahasa ucapan video yang dipilih pengguna: ``id``, ``en``, atau ``auto``
+    #: (deteksi otomatis Whisper). Dipakai untuk memilih trek subtitle YouTube
+    #: dan diteruskan ke Whisper. Bawaan ``id``: deteksi otomatis menebak dari
+    #: 30 detik pertama, dan intro musik/berbahasa Inggris membuat seluruh
+    #: transkrip video berbahasa Indonesia salah bahasa. ``server_default``
+    #: wajib: pembangunan ulang tabel SQLite (``_sync_sqlite_schema``) menyalin
+    #: hanya kolom lama, jadi job lama mendapat nilai dari DEFAULT DDL.
+    language: Mapped[str] = mapped_column(String(8), nullable=False, default="id", server_default="id")
     #: Override gaya subtitle untuk job INI (JSONB). ``NULL`` berarti memakai
     #: preset bawaan pengguna, atau bawaan modul bila preset juga tidak ada.
     #: Bentuknya bebas (ditentukan ``SubtitleStyle``) karena ia berkembang
@@ -97,6 +105,7 @@ class Job(Base):
             "status IN ('queued', 'running', 'done', 'failed', 'canceled')",
             name="status_valid",
         ),
+        CheckConstraint("language IN ('id', 'en', 'auto')", name="language_valid"),
         # TECH_SPEC §3: indeks wajib jobs(user_id, created_at DESC) — daftar job
         # per user selalu diurutkan terbaru dulu.
         Index("ix_jobs_user_id_created_at_desc", "user_id", created_at.desc()),

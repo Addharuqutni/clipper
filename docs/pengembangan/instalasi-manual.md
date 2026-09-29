@@ -44,7 +44,7 @@ punya wheel `cp314`).
 - `face_landmarker.task` (~4 MB) ke `.models\` — diunduh `setup.cmd` dari
   `storage.googleapis.com/mediapipe-models/...`. Worker **tidak** mengunduhnya
   sendiri.
-- Whisper `small` (~460 MB) diunduh otomatis saat transkripsi pertama.
+- Whisper `large-v3-turbo` (~1,6 GB) diunduh otomatis saat transkripsi pertama.
 
 ## Frontend
 

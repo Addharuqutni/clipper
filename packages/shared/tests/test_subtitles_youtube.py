@@ -185,6 +185,11 @@ class TestPickTrack:
     def test_daftar_kosong_mengembalikan_none(self) -> None:
         assert pick_track([], "en") is None
 
+    def test_bahasa_pilihan_tanpa_trek_cocok_mengembalikan_none(self) -> None:
+        """Job 'id' dengan subtitle Inggris saja → Whisper, bukan terjemahan."""
+        tracks = [self._track("en"), self._track("en-orig")]
+        assert pick_track(tracks, "id") is None
+
 
 class TestParseSubtitleDispatch:
     def test_memilih_parser_dari_ekstensi(self) -> None:

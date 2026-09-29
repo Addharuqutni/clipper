@@ -22,6 +22,9 @@ PostgreSQL, Redis, Celery, S3, WSL, atau Docker.
 **Ukuran pool = batas paralel.** Satu transkripsi dan satu render sekaligus
 secara bawaan; pekerjaan lain menunggu di antrean pool-nya. Pool terpisah
 membuat antrean render yang panjang tidak menahan job baru di tahap ingest.
+**Transkripsi didahulukan:** render yang belum mulai menunggu selama ada
+transkripsi yang antre atau berjalan (keduanya memakai semua core); render
+yang sudah berjalan tidak disela.
 
 **Status job** ditulis ke SQLite oleh `clipper_shared.worker_events.emit`,
 lalu disiarkan ke koneksi SSE di proses yang sama. `emit` melempar
@@ -42,7 +45,7 @@ dijadwalkan tiap jam.
 | Tahap | Kode | Pekerjaan |
 |---|---|---|
 | ingest | `worker_light.tasks.ingest_media` | YouTube: metadata, cek durasi, subtitle sesuai bahasa video, unduh (maks 1080p). Upload: berkas sudah ada di disk; cek durasi. |
-| transcribe | `worker_light.tasks.transcribe_media` | faster-whisper (`small`, int8, CPU), atau API remote per potongan 10 menit. Dilewati bila subtitle YouTube tersedia. |
+| transcribe | `worker_light.tasks.transcribe_media` | faster-whisper (`large-v3-turbo`, int8, CPU; model dimuat sekali per proses), atau API remote per potongan 10 menit. Bahasa dari pilihan job (bawaan `id`). Progres 20→65% mengikuti posisi audio, dengan sisa waktu. Dilewati bila ada subtitle YouTube berbahasa sama. |
 | analyze | `worker_light.tasks.score_segments` | AI memilih segmen 25–65 detik (4 percobaan untuk gangguan sementara). Gagal → segmen cadangan dari kepadatan bicara. |
 | render | `worker_render.tasks.render_clip` | Reframe 9:16 + subtitle ASS dalam **satu** encode; overlay B-roll (bila ada) di encode kedua. |
 

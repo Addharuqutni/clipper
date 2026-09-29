@@ -25,6 +25,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     stage: "upload",
     progress: 0,
     clip_count: 5,
+    language: "id",
     error: null,
     created_at: "2026-09-29T00:00:00Z",
     updated_at: "2026-09-29T00:00:00Z",

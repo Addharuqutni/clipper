@@ -7,6 +7,8 @@ export type JobStatus = "queued" | "running" | "done" | "failed" | "canceled";
 export type SourceType = "upload" | "youtube";
 export type SegmentStatus = "proposed" | "selected" | "rejected";
 export type RenderKind = "preview" | "final";
+/** Bahasa ucapan yang dipilih saat membuat job; `auto` = deteksi otomatis. */
+export type JobLanguage = "id" | "en" | "auto";
 
 export interface Job {
   id: string; user_id: string; source_type: SourceType;
@@ -14,6 +16,8 @@ export interface Job {
   progress: number;
   /** Jumlah klip yang diminta pengguna (1–30, dibatasi durasi video saat analisis). */
   clip_count: number;
+  /** Bahasa ucapan yang dipilih; `auto` = deteksi otomatis. */
+  language: JobLanguage;
   error: string | null;
   created_at: string; updated_at: string;
 }

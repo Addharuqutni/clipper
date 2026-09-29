@@ -3,7 +3,7 @@
 //
 // KONTRAK API (apps/api/app/api/v1/uploads.py; dikunci test_frontend_contract.py):
 //
-//   1. POST /jobs                          {source_type: "upload", clip_count}
+//   1. POST /jobs                          {source_type: "upload", clip_count, language}
 //   2. POST /uploads/init                  {job_id, filename, size_bytes}
 //                                          -> {upload_id, part_size_bytes, part_count, received_parts}
 //   3. PUT  /uploads/{upload_id}/parts/{n} badan = byte potongan ke-n (1-based)
@@ -13,6 +13,8 @@
 // Resume: id job disimpan di IndexedDB per berkas (nama+ukuran+waktu ubah).
 // Memilih berkas yang sama lagi memakai job yang sama, dan /uploads/init
 // mengembalikan potongan yang sudah diterima server — hanya sisanya dikirim.
+
+import type { JobLanguage } from "@/lib/types";
 
 export const PART_SIZE = 10 * 1024 * 1024; // bawaan server (UPLOAD_PART_BYTES)
 export const MAX_FILE_SIZE = 3 * 1024 * 1024 * 1024; // 3 GB, PRD FR-1.2
@@ -142,6 +144,8 @@ export interface UploadCallbacks {
   onUploadReady?: (ids: { jobId: string; uploadId: string }) => void;
   /** Jumlah klip yang ingin dibuat (1–30, bawaan 5); hanya dipakai saat job baru dibuat. */
   clipCount?: number;
+  /** Bahasa ucapan video (bawaan `id`); hanya dipakai saat job baru dibuat. */
+  language?: JobLanguage;
 }
 
 class HttpError extends Error {
@@ -208,7 +212,7 @@ export async function uploadMultipart(
     jobId = (
       await send<{ id: string }>("/jobs", {
         method: "POST",
-        body: JSON.stringify({ source_type: "upload", clip_count: cb.clipCount ?? 5 }),
+        body: JSON.stringify({ source_type: "upload", clip_count: cb.clipCount ?? 5, language: cb.language ?? "id" }),
       })
     ).id;
     await saveResumeJob(key, jobId);

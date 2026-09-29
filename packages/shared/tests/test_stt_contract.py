@@ -38,10 +38,3 @@ class TestTranscriberSelection:
         """Kedua implementasi harus memenuhi Protocol agar bisa dipertukarkan."""
         assert isinstance(FasterWhisperLocal(), Transcriber)
         assert isinstance(RemoteWhisperAPI(api_key="k"), Transcriber)
-
-    def test_default_model_adalah_small_int8(self) -> None:
-        """TECH_SPEC §0.1: default MVP = small int8."""
-        transcriber = get_transcriber("local")
-        assert isinstance(transcriber, FasterWhisperLocal)
-        assert transcriber.model_size == "small"
-        assert transcriber.compute_type == "int8"

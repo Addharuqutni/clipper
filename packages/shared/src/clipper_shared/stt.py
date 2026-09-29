@@ -11,10 +11,17 @@ kontrak ini tanpa menarik ctranslate2/ctranslate2-CPU wheel.
 
 from __future__ import annotations
 
+import os
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+#: Dipanggil dengan (detik audio yang sudah diproses, total detik audio).
+ProgressCallback = Callable[[float, float], None]
+
 __all__ = [
+    "DEFAULT_MODEL",
     "FasterWhisperLocal",
     "RemoteWhisperAPI",
     "TranscriptResult",
@@ -66,17 +73,55 @@ class Transcriber(Protocol):
     dijalankan di dalam Celery prefork worker, bukan di event loop FastAPI.
     """
 
-    def transcribe(self, audio_path: str, language: str | None) -> TranscriptResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        language: str | None,
+        on_progress: ProgressCallback | None = None,
+    ) -> TranscriptResult:
         """Transkripsi satu file audio menjadi :class:`TranscriptResult`.
 
         Args:
             audio_path: path absolut media (sudah dinormalisasi ke wav/mp3 mono).
             language: kode ISO-639-1, atau ``None`` untuk auto-detect.
+            on_progress: opsional; dipanggil berkala dengan posisi audio yang
+                sudah selesai dan total durasi (detik). Implementasi yang tidak
+                bisa melaporkan kemajuan boleh mengabaikannya.
 
         Returns:
             TranscriptResult berisi kata-kata bertimestamp.
         """
         ...
+
+
+#: Model faster-whisper per (ukuran, compute_type, thread, cache dir). Memuat
+#: ``large-v3-turbo`` dari disk makan beberapa detik dan ±1,6 GB RAM; tanpa
+#: cache setiap job memuat ulang karena :func:`get_transcriber` membuat
+#: instance baru per job.
+_MODEL_CACHE: dict[tuple[str, str, str, int, str | None], Any] = {}
+_MODEL_LOCK = threading.Lock()
+
+
+def default_cpu_threads() -> int:
+    """Thread CTranslate2: ``WHISPER_CPU_THREADS`` atau jumlah core FISIK.
+
+    Diukur pada i5-10310U (4 core/8 thread): 4 thread 16,0 dtk, 8 thread
+    17,1 dtk untuk audio yang sama — hyperthread justru memperlambat. Jumlah
+    core fisik tidak tersedia di stdlib, jadi dipakai separuh CPU logis.
+    """
+    configured = os.getenv("WHISPER_CPU_THREADS", "").strip()
+    if configured.isdigit() and int(configured) > 0:
+        return int(configured)
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
+#: Model bawaan. Diukur pada 3 klip ucapan Indonesia (i5-10310U, int8, 4
+#: thread, beam 1), WER terhadap subtitle YouTube: ``small`` ±22%, ``medium``
+#: ±18%, ``large-v3-turbo`` ±15%. Harganya kecepatan: ``small`` ±0,35×
+#: durasi audio, ``large-v3-turbo`` ±0,9–1,4×. Akurasi dipilih karena teks
+#: transkrip dibakar sebagai subtitle dan menjadi bahan AI memilih klip.
+#: ``beam_size`` 5 tidak menurunkan WER pada ukuran mana pun di pengukuran itu.
+DEFAULT_MODEL = "large-v3-turbo"
 
 
 def check_canceled(job_id: str | None) -> None:
@@ -95,22 +140,23 @@ def check_canceled(job_id: str | None) -> None:
 
 
 class FasterWhisperLocal(Transcriber):
-    """Implementasi default MVP — ``faster-whisper`` CPU int8 (TECH_SPEC §0.1).
+    """Implementasi default — ``faster-whisper`` CPU int8 (TECH_SPEC §0.1).
 
-    Default model = ``small`` int8 (≈0.5–0.9× realtime pada 4 vCPU). Model
+    Model bawaan :data:`DEFAULT_MODEL` (lihat pengukurannya di sana). Model
     di-cache di volume persisten (TECH_SPEC §4.4 butir 5) supaya tidak diunduh
     ulang tiap deploy.
     """
 
     def __init__(
         self,
-        model_size: str = "small",
+        model_size: str = DEFAULT_MODEL,
         device: str = "cpu",
         compute_type: str = "int8",
         download_root: str | None = None,
         beam_size: int = 1,
         vad: bool = False,
         job_id: str | None = None,
+        cpu_threads: int | None = None,
     ) -> None:
         self.model_size = model_size
         self.device = device
@@ -124,23 +170,36 @@ class FasterWhisperLocal(Transcriber):
         self.vad = vad
         #: Job yang sedang ditranskripsi; dipakai untuk memutus antar segmen.
         self.job_id = job_id
-        self._model: Any | None = None  # lazy, ctranslate2 WhisperModel
+        self.cpu_threads = cpu_threads or default_cpu_threads()
 
     def _load_model(self) -> Any:
-        """Muat model sekali per proses (mahal: ratusan MB)."""
-        if self._model is None:
-            # Import lazy: container A tidak boleh butuh ctranslate2.
-            from faster_whisper import WhisperModel
+        """Ambil model dari cache proses; muat sekali bila belum ada."""
+        key = (self.model_size, self.device, self.compute_type, self.cpu_threads, self.download_root)
+        with _MODEL_LOCK:
+            model = _MODEL_CACHE.get(key)
+            if model is None:
+                # Import lazy: container A tidak boleh butuh ctranslate2.
+                from faster_whisper import WhisperModel
 
-            self._model = WhisperModel(
-                self.model_size,
-                device=self.device,
-                compute_type=self.compute_type,
-                download_root=self.download_root,
-            )
-        return self._model
+                model = WhisperModel(
+                    self.model_size,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    cpu_threads=self.cpu_threads,
+                    download_root=self.download_root,
+                )
+                # Hanya satu model disimpan: ganti WHISPER_MODEL tidak boleh
+                # menumpuk beberapa model besar di RAM.
+                _MODEL_CACHE.clear()
+                _MODEL_CACHE[key] = model
+        return model
 
-    def transcribe(self, audio_path: str, language: str | None) -> TranscriptResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        language: str | None,
+        on_progress: ProgressCallback | None = None,
+    ) -> TranscriptResult:
         """Jalankan Whisper lokal dan konversi segmen+kata ke TranscriptResult.
 
         **Tentang VAD.** ``vad_filter`` dibiarkan **nonaktif secara bawaan**.
@@ -154,6 +213,9 @@ class FasterWhisperLocal(Transcriber):
         ``word_timestamps=True`` wajib: efek karaoke pada subtitle dibangun dari
         waktu per kata (TECH_SPEC §5.2.1), dan tanpanya tahap render tidak punya
         data untuk menganimasikan sorotan.
+
+        ``on_progress`` dipanggil setelah setiap segmen dengan posisi akhir
+        segmen dan durasi audio — sumber progres "12:30 / 40:00" di UI.
         """
         import time
 
@@ -178,6 +240,8 @@ class FasterWhisperLocal(Transcriber):
             # pembatalan berhenti dalam hitungan detik, bukan setelah seluruh
             # rekaman selesai ditranskripsi.
             check_canceled(self.job_id)
+            if on_progress is not None:
+                on_progress(float(segment.end), float(getattr(info, "duration", 0.0) or 0.0))
             text = (segment.text or "").strip()
             if not text:
                 continue
@@ -244,13 +308,21 @@ class RemoteWhisperAPI(Transcriber):
         #: Job yang sedang ditranskripsi; diperiksa di sekitar unggahan audio.
         self.job_id = job_id
 
-    def transcribe(self, audio_path: str, language: str | None) -> TranscriptResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        language: str | None,
+        on_progress: ProgressCallback | None = None,
+    ) -> TranscriptResult:
         """Kirim audio ke API dan normalisasi respons ke TranscriptResult.
 
         Memakai ``response_format="verbose_json"`` dengan
         ``timestamp_granularities=["word"]`` karena hanya format itu yang
         memberi timestamp per kata — sama seperti jalur lokal, sehingga tahap
         hilir tidak perlu tahu backend mana yang dipakai.
+
+        ``on_progress`` diabaikan: API mengembalikan seluruh hasil sekaligus.
+        Pemanggil melaporkan kemajuan per potongan audio.
 
         Raises:
             RuntimeError: bila API tidak mengembalikan data yang dapat dipakai.
@@ -357,7 +429,7 @@ class RemoteWhisperAPI(Transcriber):
 def get_transcriber(
     backend: str,
     *,
-    model_size: str = "small",
+    model_size: str = DEFAULT_MODEL,
     compute_type: str = "int8",
     download_root: str | None = None,
     api_key: str | None = None,

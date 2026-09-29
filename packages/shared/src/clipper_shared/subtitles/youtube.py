@@ -56,12 +56,17 @@ def pick_track(
 ) -> SubtitleTrack | None:
     """Pilih trek terbaik: bahasa dulu, lalu manual > otomatis, lalu format.
 
-    Bahasa yang dicari, berurutan: ``preferred_lang`` (pilihan pengguna),
+    ``preferred_lang`` (pilihan eksplisit pengguna) bersifat WAJIB: bila tidak
+    ada trek dalam bahasa itu, hasilnya ``None`` sehingga pemanggil memakai
+    Whisper. Subtitle bahasa lain (mis. terjemahan Inggris dari video
+    berbahasa Indonesia) bukan transkrip ucapan — teks itu akan terbakar ke
+    klip dan dinilai LLM.
+
+    Tanpa ``preferred_lang`` (deteksi otomatis), bahasa dicari berurutan:
     ``spoken_lang`` (bahasa video menurut yt-dlp), lalu bahasa trek ``-orig``
     (trek otomatis dalam bahasa asli pembicara). Tanpa langkah ini, video
     berbahasa Indonesia dengan subtitle manual Arab/Inggris/Indonesia bisa
-    mendapat trek Arab hanya karena urutannya — dan teks itu terbakar ke klip
-    serta menjadi transkrip yang dinilai LLM.
+    mendapat trek Arab hanya karena urutannya.
 
     Di dalam bahasa yang sama, subtitle manual diutamakan: subtitle otomatis
     YouTube sering salah mengenali kata.
@@ -72,15 +77,20 @@ def pick_track(
     def base(lang: str) -> str:
         return lang.lower().replace("_", "-").split("-")[0]
 
-    orig = next((t.base_lang for t in tracks if t.lang.endswith("-orig")), None)
-    candidates = tracks
-    for wanted in (preferred_lang, spoken_lang, orig):
-        if not wanted:
-            continue
-        matching = [t for t in tracks if t.base_lang == base(wanted)]
-        if matching:
-            candidates = matching
-            break
+    if preferred_lang:
+        candidates = [t for t in tracks if t.base_lang == base(preferred_lang)]
+        if not candidates:
+            return None
+    else:
+        orig = next((t.base_lang for t in tracks if t.lang.endswith("-orig")), None)
+        candidates = tracks
+        for wanted in (spoken_lang, orig):
+            if not wanted:
+                continue
+            matching = [t for t in tracks if t.base_lang == base(wanted)]
+            if matching:
+                candidates = matching
+                break
 
     # json3 lebih kaya (bisa memuat waktu per kata); srt/vtt jadi cadangan.
     def rank(track: SubtitleTrack) -> tuple[int, int, int]:

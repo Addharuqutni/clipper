@@ -298,7 +298,7 @@ Ini memberi "stickiness" pada subjek: kamera tidak berpindah hanya karena wajah 
 
 **Dua jebakan implementasi yang wajib dihindari** (keduanya ditemukan di kode referensi sebagai komentar eksplisit):
 
-1. **Konversi ruang warna.** OpenCV membaca frame sebagai **BGR**, MediaPipe memerlukan **RGB**. Tanpa `cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)` sebelum `detect_for_video()`, akurasi deteksi hancur dan gejalanya halus (bukan error) — hanya crop yang terlihat salah.
+1. **Konversi ruang warna.** OpenCV membaca frame sebagai **BGR**, MediaPipe memerlukan **RGB**. Tanpa `cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)` sebelum `detect_for_video()`, akurasi deteksi hancur dan gejalanya halus (bukan error) — hanya crop yang terlihat salah. *Implementasi ClipperAI:* frame dibaca dari FFmpeg langsung sebagai `rgb24` dan diperkecil ke lebar ≤640 px (`ANALYSIS_MAX_WIDTH`, `flags=area`) sebelum masuk pipa; landmark ternormalisasi sehingga posisi crop tetap dihitung pada ukuran sumber. Ini menghapus salinan BGR→RGB per frame di Python dan memangkas pelacakan 1080p ±40 dtk → ±14–24 dtk per 30 dtk klip pada CPU 8 thread.
 2. **Deadlock saat menulis ke stdin FFmpeg.** Bila frame mentah dikirim ke stdin ffmpeg, **ffmpeg akan mati kunci** saat buffer stderr (di Windows ~64 KB) penuh, karena tidak ada yang membacanya. Wajib menjalankan **thread pembuangan stderr** yang membaca terus-menerus, plus **watchdog** (`ENCODE_STALL_TIMEOUT_S = 300`) yang mematikan ffmpeg bila tidak ada kemajuan frame, supaya `stdin.write()` tidak memblokir selamanya.
 
 Lebar crop dihitung `min(orig_w, orig_h * 1080/1920)` — sumber yang lebih sempit dari 9:16 memakai lebar penuh, menghindari rentang negatif.

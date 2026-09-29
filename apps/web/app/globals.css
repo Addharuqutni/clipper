@@ -328,6 +328,49 @@ a { color: inherit; }
 .alert-warn { background: var(--accent); color: var(--ink); }
 .alert-ok { background: var(--toxic); color: var(--ink); }
 
+/* Dialog konfirmasi aksi (ConfirmDialog). Garis tepi kiri tebal berwarna
+   menandai tingkat bahaya tanpa bergantung pada warna tombol saja. */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--shell-pad);
+  background: rgb(10 10 10 / 0.55);
+}
+.confirm-box {
+  width: min(100%, 30rem);
+  background: var(--panel);
+  border: var(--bw) solid var(--ink);
+  border-left-width: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: var(--panel-pad);
+  display: grid;
+  gap: 0.9rem;
+  line-height: 1.5;
+}
+.confirm-warn { border-left-color: var(--accent); }
+.confirm-danger { border-left-color: var(--rec); }
+.confirm-title {
+  font-family: var(--font-grotesk);
+  font-size: 1.15rem;
+  margin: 0;
+}
+.confirm-list {
+  margin: 0.6rem 0 0;
+  padding-left: 1.15rem;
+  list-style: square;
+}
+.confirm-list li + li { margin-top: 0.3rem; }
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.btn-danger-solid { background: var(--rec); color: var(--ink); }
+
 /* Skeleton loading — panduan UX menandai "Loading States" sebagai HIGH.
    Shimmer dipisah agar bisa dimatikan via prefers-reduced-motion. */
 .skeleton {

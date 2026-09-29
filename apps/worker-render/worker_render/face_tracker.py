@@ -6,10 +6,11 @@ mendapatkan active speaker detection tanpa model khusus (TECH_SPEC §5.2).
 
 **Dua jebakan yang ditangani modul ini:**
 
-1. **Ruang warna.** OpenCV dan FFmpeg menghasilkan frame **BGR**; MediaPipe
-   memerlukan **RGB**. Tanpa konversi, akurasi deteksi jatuh diam-diam: tidak
-   ada error, hanya crop yang terus salah. Konversi dilakukan di dalam sini
-   supaya pemanggil tidak bisa lupa.
+1. **Ruang warna.** FFmpeg dan OpenCV biasanya menghasilkan frame **BGR**;
+   MediaPipe memerlukan **RGB**. Tanpa konversi, akurasi deteksi jatuh
+   diam-diam: tidak ada error, hanya crop yang terus salah. Karena itu
+   :func:`worker_render.ffmpeg_pipe.iter_video_frames` meminta ``rgb24``
+   langsung dari FFmpeg, dan :meth:`FaceTracker.detect` hanya menerima RGB.
 2. **Timestamp video.** ``RunningMode.VIDEO`` mensyaratkan timestamp naik
    monoton. Timestamp yang sama atau mundur akan melempar error, jadi nilainya
    diturunkan dari nomor frame (bukan dari ``time.monotonic()``, yang bisa
@@ -133,13 +134,28 @@ class FaceTracker:
             if callable(close):
                 close()
 
-    def detect(self, bgr_frame: bytes, *, frame_width: int, frame_height: int, frame_index: int, fps: float) -> list[FaceObservation]:
-        """Deteksi wajah pada satu frame BGR mentah.
+    def detect(
+        self,
+        rgb_frame: bytes,
+        *,
+        frame_width: int,
+        frame_height: int,
+        frame_index: int,
+        fps: float,
+        source_width: int = 0,
+        source_height: int = 0,
+    ) -> list[FaceObservation]:
+        """Deteksi wajah pada satu frame RGB mentah.
 
         Args:
-            bgr_frame: Byte frame BGR (``frame_width * frame_height * 3``).
+            rgb_frame: Byte frame RGB (``frame_width * frame_height * 3``),
+                langsung dari :func:`worker_render.ffmpeg_pipe.iter_video_frames`.
             frame_index: Nomor frame, dipakai untuk menghitung timestamp.
             fps: Laju frame video sumber.
+            source_width, source_height: Ukuran ruang koordinat hasil. Frame
+                analisis boleh lebih kecil dari sumber; landmark MediaPipe
+                ternormalisasi (0..1), jadi koordinat tetap tepat pada ukuran
+                sumber. Bawaan: ukuran frame itu sendiri.
 
         Returns:
             Daftar wajah yang terdeteksi, kosong bila tidak ada.
@@ -152,10 +168,10 @@ class FaceTracker:
         if landmarker is None:
             raise RuntimeError("FaceTracker belum dibuka; panggil open() lebih dulu.")
 
-        # BGR -> RGB. Tanpa langkah ini, MediaPipe menerima saluran tertukar dan
-        # akurasi deteksi turun tanpa error apa pun.
-        array = np.frombuffer(bgr_frame, dtype=np.uint8).reshape((frame_height, frame_width, 3))
-        rgb = array[:, :, ::-1]
+        # Frame sudah RGB dari FFmpeg (``-pix_fmt rgb24``). Buffer ``bytes``
+        # langsung dibungkus tanpa salinan; membalik saluran di sini (BGR→RGB)
+        # dulu memakan satu salinan penuh per frame.
+        array = np.frombuffer(rgb_frame, dtype=np.uint8).reshape((frame_height, frame_width, 3))
 
         # Timestamp wajib naik monoton. Diturunkan dari nomor frame agar tidak
         # terpengaruh penyesuaian jam sistem (time.monotonic bisa mundur).
@@ -164,7 +180,7 @@ class FaceTracker:
             timestamp_ms = self._last_timestamp_ms + 1
         self._last_timestamp_ms = timestamp_ms
 
-        image = MpImage(image_format=ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
+        image = MpImage(image_format=ImageFormat.SRGB, data=array)
         result = landmarker.detect_for_video(image, timestamp_ms)
 
         self.frames_seen += 1
@@ -173,8 +189,10 @@ class FaceTracker:
             return []
 
         self.frames_with_face += 1
+        out_width = source_width or frame_width
+        out_height = source_height or frame_height
         return [
-            self._to_observation(landmarks, frame_width, frame_height)
+            self._to_observation(landmarks, out_width, out_height)
             for landmarks in landmarks_per_face
         ]
 

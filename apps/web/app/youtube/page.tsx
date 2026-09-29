@@ -9,6 +9,8 @@ import { api } from "@/lib/api/client";
 import CookieUploader from "@/components/CookieUploader";
 import AiReadinessNotice from "@/components/AiReadinessNotice";
 import ClipCountPicker from "@/components/ClipCountPicker";
+import LanguagePicker from "@/components/LanguagePicker";
+import type { JobLanguage } from "@/lib/types";
 
 const SYARAT = [
   "Video bersifat publik atau unlisted",
@@ -20,6 +22,7 @@ export default function YoutubePage() {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [clipCount, setClipCount] = useState(5);
+  const [language, setLanguage] = useState<JobLanguage>("id");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +34,7 @@ export default function YoutubePage() {
     setError(null);
     setLoading(true); // tombol dinonaktifkan selama proses — cegah kirim ganda
     try {
-      const job = await api.submitYoutube(url.trim(), clipCount);
+      const job = await api.submitYoutube(url.trim(), clipCount, language);
       // Halaman job menampilkan progres langsung (SSE).
       router.push(`/jobs/${job.id}`);
     } catch (e) {
@@ -72,6 +75,8 @@ export default function YoutubePage() {
             style={{ marginTop: "0.5rem", marginBottom: "0.85rem" }}
           />
 
+          <LanguagePicker id="yt-lang" value={language} onChange={setLanguage} disabled={loading} />
+
           <ClipCountPicker
             id="yt-clips"
             value={clipCount}
@@ -101,7 +106,7 @@ export default function YoutubePage() {
           <div className="label">Syarat</div>
           <ul style={{ paddingLeft: "1.1rem", margin: "0.75rem 0 0" }}>
             {SYARAT.map((s) => (
-              <li key={s} className="muted" style={{ fontSize: "0.82rem", marginBottom: "0.4rem" }}>
+              <li key={s} className="muted" style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
                 {s}
               </li>
             ))}

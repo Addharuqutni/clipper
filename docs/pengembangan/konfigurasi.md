@@ -34,7 +34,8 @@ repo bisa dipindah tanpa mengedit `.env`.
 |---|---|---|
 | `MAX_VIDEO_DURATION_MIN` | `180` | Batas atas durasi video (menit). Berlaku = min(nilai ini, kapasitas konteks model AI). |
 | `AI_CONTEXT_TOKENS` | kosong | Konteks model bila penyedia AI diatur lewat env. Kosong = 128.000. |
-| `WHISPER_MODEL` | `small` | Ukuran model transkripsi. Lebih besar = lebih akurat, lebih lambat di CPU. |
+| `WHISPER_MODEL` | `large-v3-turbo` | Model transkripsi. Paling akurat untuk bahasa Indonesia (±15% kata salah vs ±22% `small`), ±1× durasi video di CPU 4 core. `small` ±3× lebih cepat. |
+| `WHISPER_CPU_THREADS` | core fisik | Thread Whisper. Hyperthread justru memperlambat. |
 | `STT_BACKEND` | `local` | `remote` = API OpenAI-compatible (`WHISPER_API_KEY`, `WHISPER_API_BASE_URL`). |
 | `AUTO_RENDER_FINAL` | `true` | Render 1080p semua klip otomatis setelah analisis. |
 | `RENDER_SLOTS`, `STT_SLOTS` | `1` | Render/transkripsi paralel. Naikkan hanya bila CPU ≥ 8 core. |

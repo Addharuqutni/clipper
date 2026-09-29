@@ -97,6 +97,7 @@ async def create_job(
     source_type: str,
     source_url: str | None,
     clip_count: int,
+    language: str = "id",
 ) -> Job:
     """Buat job baru; jadwalkan ingest untuk YouTube.
 
@@ -114,6 +115,7 @@ async def create_job(
         stage="ingest" if source_type == "youtube" else "upload",
         progress=0,
         clip_count=clip_count,
+        language=language,
     )
     db.add(job)
     await db.commit()

@@ -180,11 +180,16 @@ def iter_video_frames(
     duration_s: float = 0.0,
     job_id: str | None = None,
 ) -> Iterator[bytes]:
-    """Baca frame video sebagai BGR mentah dari ``stdout`` FFmpeg.
+    """Baca frame video sebagai RGB mentah (``rgb24``) dari ``stdout`` FFmpeg.
 
     Dipakai untuk tahap yang perlu memeriksa setiap frame (pelacakan wajah).
     Membaca dari FFmpeg, bukan dari OpenCV, karena FFmpeg jauh lebih cepat
     dalam mendekode dan kita sudah memerlukannya untuk encoding.
+
+    ``width``/``height`` adalah ukuran frame yang DIHASILKAN: bila berbeda dari
+    sumber, FFmpeg menskalakannya (``flags=area``) sebelum dikirim ke pipa. Frame
+    dikirim sebagai RGB karena itulah format MediaPipe — konversi BGR→RGB di
+    Python berarti satu salinan penuh per frame (±12 dtk per 900 frame 1080p).
 
     ``start_s``/``duration_s`` membatasi rentang yang dibaca. Keduanya diberikan
     sebagai opsi INPUT (``-ss``/``-t`` sebelum ``-i``) — pada jalur DECODE ini
@@ -214,8 +219,10 @@ def iter_video_frames(
         args += ["-t", f"{duration_s:.3f}"]
     args += [
         "-i", str(path),
+        "-map", "0:v:0",
+        "-vf", f"scale={width}:{height}:flags=area",
         "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
+        "-pix_fmt", "rgb24",
         "-",
     ]
 

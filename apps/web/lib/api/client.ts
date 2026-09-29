@@ -8,6 +8,7 @@ import type {
   AiProviderInfo,
   AiProviderTestResult,
   CookieValidationResult,
+  JobLanguage,
   CropModeInfo,
   Job,
   JobEvent,
@@ -247,13 +248,14 @@ export const api = {
   cancelJob: (id: string) => request<Job>(`/jobs/${id}/cancel`, { method: "POST" }),
   /** Hapus job beserta media dan hasil render (salinan di output/clips tetap). */
   deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
-  submitYoutube: (url: string, clipCount = 5) =>
+  submitYoutube: (url: string, clipCount = 5, language: JobLanguage = "id") =>
     request<Job>("/jobs", {
       method: "POST",
       body: JSON.stringify({
         source_type: "youtube",
         source_url: url,
         clip_count: clipCount,
+        language,
       }),
     }),
 

@@ -56,7 +56,8 @@ Engine: FFmpeg, OpenCV, MediaPipe — MediaPipe untuk tracking wajah & reframe")
 ### Jalur MVP pengganti (TECH_SPEC §5.2 revisi)
 
 1. **MediaPipe Face Landmarker** (`mediapipe.tasks`, `RunningMode.VIDEO`,
-   `num_faces=10`) dengan konversi **BGR→RGB** sebelum `detect_for_video()`.
+   `num_faces=10`) dengan frame **RGB** (FFmpeg `rgb24`, lebar ≤640 px) ke
+   `detect_for_video()`.
 2. **Sinyal bicara** dari bukaan 24 lip-landmark: `MIN_SPEAK_RATIO=0.18`.
 3. **Skor pembicara aktif** per frame: ukuran × (1 + `SPEAKER_BONUS`×bicara) −
    `CONTINUITY_WEIGHT`×jarak dari crop sekarang.

@@ -11,6 +11,7 @@ import TranscriptEditor from "@/components/TranscriptEditor";
 import CaptionStylePanel from "@/components/CaptionStylePanel";
 import OverlayTimeline from "@/components/OverlayTimeline";
 import JobLogPanel from "@/components/JobLogPanel";
+import ConfirmDialog, { type ConfirmDialogProps } from "@/components/ConfirmDialog";
 
 type Tab = "editor" | "segments" | "style" | "log";
 const TABS: { id: Tab; label: string }[] = [
@@ -28,6 +29,47 @@ const STATUS_LABEL: Record<Job["status"], string> = {
   canceled: "Dibatalkan",
 };
 
+type JobAction = "redispatch" | "rescore" | "delete";
+
+/** Isi dialog konfirmasi per aksi. Akibatnya mengikuti perilaku backend:
+ *  proses ulang mulai lagi dari ingest (transkrip + segmen diganti), analisis
+ *  ulang memakai transkrip yang ada tetapi mengganti segmen, dan segmen yang
+ *  diganti ikut menghapus render serta overlay-nya (ON DELETE CASCADE). */
+const ACTION_CONFIRM: Record<JobAction, Omit<ConfirmDialogProps, "open" | "onConfirm" | "onCancel">> = {
+  redispatch: {
+    title: "Proses ulang job ini?",
+    description: "Job dijalankan lagi dari awal: ambil video, transkripsi, lalu analisis AI.",
+    consequences: [
+      "Transkrip, termasuk koreksi teks yang sudah Anda buat, diganti hasil transkripsi baru.",
+      "Semua klip, rentang yang diubah, overlay, dan hasil render diganti.",
+      "Memakan waktu lebih lama dan memakai kuota penyedia AI lagi.",
+    ],
+    confirmLabel: "Ya, proses ulang",
+    tone: "warn",
+  },
+  rescore: {
+    title: "Analisis ulang job ini?",
+    description: "AI memilih klip lagi dari transkrip yang sudah ada. Video tidak diunduh atau ditranskripsi ulang.",
+    consequences: [
+      "Semua klip, rentang yang diubah, overlay, dan hasil render diganti hasil analisis baru.",
+      "Transkrip dan koreksi teks tetap dipertahankan.",
+      "Memakai kuota penyedia AI lagi.",
+    ],
+    confirmLabel: "Ya, analisis ulang",
+    tone: "warn",
+  },
+  delete: {
+    title: "Hapus job ini?",
+    description: "Tindakan ini tidak bisa dibatalkan.",
+    consequences: [
+      "Video sumber, transkrip, klip, dan semua hasil render dihapus.",
+      "Salinan klip di folder output/clips tetap ada.",
+    ],
+    confirmLabel: "Hapus permanen",
+    tone: "danger",
+  },
+};
+
 function ScoreMeter({ label, value }: { label: string; value: number | null }) {
   const pct = Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100);
   return (
@@ -37,7 +79,7 @@ function ScoreMeter({ label, value }: { label: string; value: number | null }) {
         <span className="mono">{value === null ? "–" : pct}</span>
       </div>
       <div className="progress" style={{ height: 12, marginTop: 4 }}>
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+        <div className="progress-fill" style={{ "--pct": pct } as React.CSSProperties} />
       </div>
     </div>
   );
@@ -159,6 +201,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   const [note, setNote] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [confirming, setConfirming] = useState<JobAction | null>(null);
   // Tab awal adalah daftar klip: semua klip dirender otomatis, jadi hal
   // pertama yang dicari pengguna adalah hasil yang siap diunduh.
   const [tab, setTab] = useState<Tab>("segments");
@@ -200,9 +243,17 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
     void load();
   }, [load]);
 
+  // Pesan tahap terakhir dari SSE, mis. "Transkripsi 12:30 / 40:00 · ±6 menit
+  // lagi". Hanya hidup di stream (tidak disimpan di baris job), jadi muncul
+  // pada event berikutnya bila halaman dibuka di tengah proses.
+  const [liveMessage, setLiveMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (!jobId) return;
-    return subscribeJobStream(jobId, () => void load());
+    return subscribeJobStream(jobId, (event) => {
+      setLiveMessage(event.status === "running" ? event.message : null);
+      void load();
+    });
   }, [jobId, load]);
 
   const runAction = async (action: () => Promise<unknown>, failure: string) => {
@@ -229,12 +280,18 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
     }
   };
 
-  const deleteJob = async () => {
-    if (!window.confirm("Hapus job ini beserta video sumber dan hasil render? Salinan di folder output/clips tetap ada.")) return;
-    await runAction(async () => {
-      await api.deleteJob(jobId);
-      router.push("/dashboard");
-    }, "Gagal menghapus job.");
+  const performAction = (action: JobAction) => {
+    setConfirming(null);
+    if (action === "redispatch") {
+      void runAction(() => api.redispatchJob(jobId), "Gagal memproses ulang.");
+    } else if (action === "rescore") {
+      void runAction(() => api.rescoreJob(jobId), "Gagal menjalankan analisis ulang.");
+    } else {
+      void runAction(async () => {
+        await api.deleteJob(jobId);
+        router.push("/dashboard");
+      }, "Gagal menghapus job.");
+    }
   };
 
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -269,11 +326,19 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                         : STATUS_LABEL[job.status]}
                 </span>
                 <span className={`tag tag-${job.source_type}`}>{job.source_type}</span>
+                {active && liveMessage ? (
+                  <span className="mono muted" style={{ fontSize: "0.8rem" }} aria-live="polite">
+                    {liveMessage}
+                  </span>
+                ) : null}
               </>
             ) : null}
           </div>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <Link href="/dashboard" className="btn">
+            Dashboard
+          </Link>
           {active ? (
             <button className="btn" type="button" disabled={actionBusy} onClick={() => void runAction(() => api.cancelJob(jobId), "Gagal membatalkan job.")}>
               Batalkan
@@ -281,22 +346,29 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
           ) : null}
           {job && !active ? (
             <>
-              <button className="btn" type="button" disabled={actionBusy} onClick={() => void runAction(() => api.redispatchJob(jobId), "Gagal memproses ulang.")}>
+              <button className="btn" type="button" disabled={actionBusy} onClick={() => setConfirming("redispatch")}>
                 Proses ulang
               </button>
-              <button className="btn" type="button" disabled={actionBusy} onClick={() => void runAction(() => api.rescoreJob(jobId), "Gagal menjalankan analisis ulang.")}>
+              <button className="btn" type="button" disabled={actionBusy} onClick={() => setConfirming("rescore")}>
                 Analisis ulang
               </button>
             </>
           ) : null}
-          <button className="btn" type="button" disabled={actionBusy || !job} onClick={() => void deleteJob()}>
+          {/* Aksi destruktif dipisah jarak dan warna agar tidak tertekan tak sengaja. */}
+          <button className="btn btn-danger" type="button" disabled={actionBusy || !job} onClick={() => setConfirming("delete")} style={{ marginLeft: "0.5rem" }}>
             Hapus
           </button>
-          <Link href="/dashboard" className="btn">
-            Dashboard
-          </Link>
         </div>
       </div>
+
+      {confirming ? (
+        <ConfirmDialog
+          open
+          {...ACTION_CONFIRM[confirming]}
+          onConfirm={() => performAction(confirming)}
+          onCancel={() => setConfirming(null)}
+        />
+      ) : null}
 
       {job?.error && !active ? (
         <p className="alert" role="status" style={{ margin: 0 }}>
@@ -397,6 +469,8 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                         src={api.jobRenderFileUrl(jobId, currentVideo.id)}
                         style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
                       />
+                    ) : segments === null ? (
+                      <div className="label" style={{ color: "var(--paper)", opacity: 0.7 }}>Memuat…</div>
                     ) : isPending ? (
                       <>
                         <span className="tally" style={{ width: 14, height: 14 }} />
@@ -486,8 +560,10 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                             aria-label={`Putar klip ${index + 1}: ${segment.label ?? "tanpa judul"}`}
                             style={{
                               cursor: "pointer",
-                              background: isSelected ? "#fff8d9" : undefined,
+                              background: isSelected ? "var(--highlight)" : undefined,
                               boxShadow: isSelected ? "var(--shadow-lg)" : undefined,
+                              // Penanda terpilih selain warna: tepi atas tebal.
+                              borderTopWidth: isSelected ? 8 : undefined,
                             }}
                             onClick={select}
                             onKeyDown={(e) => {

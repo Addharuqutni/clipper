@@ -13,6 +13,8 @@ import {
   validateFile,
 } from "@/lib/upload/multipart";
 import ClipCountPicker from "@/components/ClipCountPicker";
+import LanguagePicker from "@/components/LanguagePicker";
+import type { JobLanguage } from "@/lib/types";
 
 /**
  * Durasi video lokal lewat elemen `<video>` bawaan browser (hanya metadata,
@@ -37,6 +39,7 @@ function readVideoDuration(file: File): Promise<number | null> {
 export default function Uploader() {
   const [file, setFile] = useState<File | null>(null);
   const [clipCount, setClipCount] = useState(5);
+  const [language, setLanguage] = useState<JobLanguage>("id");
   /** Durasi berkas terpilih (detik), dibaca browser; `null` bila tidak terbaca. */
   const [durationS, setDurationS] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +86,7 @@ export default function Uploader() {
           uploadIdRef.current = uploadId;
         },
         clipCount,
+        language,
       });
       uploadIdRef.current = null;
       setDoneJob(jobId);
@@ -127,17 +131,19 @@ export default function Uploader() {
         }}
       >
         <input {...getInputProps()} />
-        <div
+        <svg
           aria-hidden="true"
-          style={{
-            fontSize: "2.25rem",
-            fontWeight: 900,
-            lineHeight: 1,
-            marginBottom: "0.6rem",
-          }}
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="square"
+          style={{ display: "block", margin: "0 auto 0.75rem" }}
         >
-          ⤓
-        </div>
+          <path d="M12 3v12M6.5 9.5 12 15l5.5-5.5M4 20h16" />
+        </svg>
         {isDragActive ? (
           <p className="label" style={{ margin: 0, fontSize: "0.9rem" }}>
             Lepaskan berkas di sini
@@ -147,7 +153,7 @@ export default function Uploader() {
             <p style={{ fontWeight: 900, fontSize: "1.05rem", margin: "0 0 0.35rem" }}>
               Seret &amp; letakkan video
             </p>
-            <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>
+            <p className="muted" style={{ fontSize: "0.88rem", margin: 0 }}>
               atau klik untuk memilih — .mp4 / .mov / .mkv, maks 3 GB
             </p>
           </>
@@ -181,9 +187,10 @@ export default function Uploader() {
         </p>
       ) : null}
 
-      {/* Jumlah klip dipilih SEBELUM menekan Upload: job dibuat di dalam
-          uploadMultipart(), jadi nilainya harus sudah final saat itu. */}
+      {/* Jumlah klip dan bahasa dipilih SEBELUM menekan Upload: job dibuat di
+          dalam uploadMultipart(), jadi nilainya harus sudah final saat itu. */}
       <div style={{ marginTop: "1rem" }}>
+        <LanguagePicker id="up-lang" value={language} onChange={setLanguage} disabled={busy} />
         <ClipCountPicker
           id="up-clips"
           value={clipCount}
@@ -215,7 +222,7 @@ export default function Uploader() {
         aria-label="Progres unggah"
       >
         <div className="progress" style={{ height: 22 }}>
-          <div className="progress-fill" style={{ width: `${pct}%` }} />
+          <div className="progress-fill" style={{ "--pct": pct } as React.CSSProperties} />
         </div>
         <div
           className="mono"
