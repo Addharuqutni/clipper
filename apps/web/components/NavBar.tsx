@@ -28,29 +28,21 @@ export function NavBar() {
         zIndex: 50,
       }}
     >
-      <div
-        className="shell"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-          paddingTop: "0.75rem",
-          paddingBottom: "0.75rem",
-        }}
-      >
+      <div className="shell nav-bar">
         <Link
           href="/"
+          aria-label="ClipperAI — beranda"
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.55rem",
             textDecoration: "none",
+            fontFamily: "var(--font-display)",
           }}
         >
           {/* Logo blok: teks di dalam kotak hitam. Bukan emoji, bukan raster. */}
           <span
+            aria-hidden="true"
             style={{
               background: "var(--ink)",
               color: "var(--accent)",
@@ -69,40 +61,28 @@ export function NavBar() {
           </span>
         </Link>
 
-        <nav
-          aria-label="Navigasi utama"
-          style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}
-        >
+        {/* Identitas pengguna lokal. Tidak ada tombol masuk/keluar:
+            aplikasi ini single-user, jadi tidak ada sesi yang dikelola. */}
+        <span className="nav-identity" title={LOCAL_IDENTITY_EMAIL}>
+          Lokal
+        </span>
+
+        <nav aria-label="Navigasi utama" className="nav-links">
           {ITEMS.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
+              // Halaman aktif ditandai blok kuning + shadow keras, bukan
+              // sekadar warna teks (warna bukan satu-satunya penanda).
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className="label"
-                style={{
-                  textDecoration: "none",
-                  border: "var(--bw-thin) solid var(--ink)",
-                  padding: "0.45rem 0.7rem",
-                  // Halaman aktif ditandai blok kuning + shadow keras,
-                  // bukan sekadar perubahan warna teks (aksesibilitas:
-                  // warna bukan satu-satunya penanda).
-                  background: active ? "var(--accent)" : "var(--panel)",
-                  boxShadow: active ? "var(--shadow-sm)" : "none",
-                  fontWeight: 900,
-                }}
+                className="nav-link"
               >
                 {item.label}
               </Link>
             );
           })}
-
-          {/* Identitas pengguna lokal. Tidak ada tombol masuk/keluar:
-              aplikasi ini single-user, jadi tidak ada sesi yang dikelola. */}
-          <span className="label muted" title={LOCAL_IDENTITY_EMAIL}>
-            lokal
-          </span>
         </nav>
       </div>
     </header>

@@ -151,16 +151,16 @@ export default function CookieUploader() {
           <p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.5rem" }}>
             {requirements.explanation}
           </p>
-          <p className="mono" style={{ fontSize: "0.68rem", margin: 0 }}>
+          <p className="mono" style={{ fontSize: "0.75rem", margin: 0 }}>
             minimal salah satu: {requirements.required_any_of.join(", ")}
           </p>
-          <p className="mono" style={{ fontSize: "0.68rem", margin: "0.3rem 0 0" }}>
+          <p className="mono" style={{ fontSize: "0.75rem", margin: "0.3rem 0 0" }}>
             ukuran maks: {Math.round(requirements.max_file_bytes / 1024)} KB
           </p>
         </details>
       ) : null}
 
-      <p className="mono" style={{ fontSize: "0.66rem", marginTop: "0.85rem", marginBottom: 0 }}>
+      <p className="hint" style={{ marginTop: "0.85rem", marginBottom: 0 }}>
         Disimpan terenkripsi di komputer ini; isinya tidak pernah dikembalikan atau dicatat.
       </p>
     </div>

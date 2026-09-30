@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api/client";
 import type { TranscriptWord } from "@/lib/types";
+import WordTimeline from "@/components/WordTimeline";
 
 interface Props {
   jobId: string;
@@ -41,6 +42,8 @@ export default function TranscriptEditor({ jobId }: Props) {
 
   // Kata yang sedang aktif (diputar atau diklik).
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // Detik pemutar, untuk playhead timeline.
+  const [currentTime, setCurrentTime] = useState(0);
   // Kata yang sedang diedit (null = tidak ada).
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -81,6 +84,9 @@ export default function TranscriptEditor({ jobId }: Props) {
 
   /** Lompat pemutar ke detik tertentu. */
   const seekTo = useCallback((seconds: number) => {
+    // Playhead timeline langsung pindah; jangan menunggu timeupdate, yang
+    // tidak datang bila video belum/tidak bisa dimuat.
+    setCurrentTime(seconds);
     const video = videoRef.current;
     if (!video) return;
     video.currentTime = seconds;
@@ -92,8 +98,10 @@ export default function TranscriptEditor({ jobId }: Props) {
   /** Tandai kata aktif berdasarkan waktu pemutar (dipanggil dari onTimeUpdate). */
   const syncActiveFromVideo = useCallback(() => {
     const video = videoRef.current;
-    if (!video || editingIndex !== null) return;
+    if (!video) return;
     const t = video.currentTime;
+    setCurrentTime(t);
+    if (editingIndex !== null) return;
     // Cari kata yang waktunya melingkupi t. Daftar kecil (ratusan kata), jadi
     // pencarian linear murni lebih murah daripada membangun indeks.
     const found = words.findIndex((w) => t >= w.start_s && t < w.end_s);
@@ -226,58 +234,24 @@ export default function TranscriptEditor({ jobId }: Props) {
           {words.length} kata · {duration.toFixed(1)}s
         </div>
 
-        {/* Timeline kata: satu blok kecil per kata, lebarnya proporsional durasi.
-            Mengklik blok melompat ke kata itu. */}
-        <div className="label" style={{ marginTop: "1rem" }}>
-          Timeline
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 1,
-            marginTop: "0.4rem",
-            height: 34,
-            alignItems: "stretch",
-            overflowX: "auto",
-            border: "var(--bw) solid var(--line)",
-            background: "var(--muted-bg)",
-            padding: 2,
+        <WordTimeline
+          words={words}
+          duration={duration}
+          currentTime={currentTime}
+          activeIndex={activeIndex}
+          onSeek={(seconds, index) => {
+            seekTo(seconds);
+            if (index !== undefined) setActiveIndex(index);
           }}
-          role="list"
-          aria-label="Timeline kata"
-        >
-          {words.map((w, i) => {
-            const span = Math.max(0.05, w.end_s - w.start_s);
-            const isActive = i === activeIndex;
-            return (
-              <button
-                key={`${w.index}-${i}`}
-                role="listitem"
-                type="button"
-                title={`${w.text} (${w.start_s.toFixed(1)}s)`}
-                onClick={() => {
-                  seekTo(w.start_s);
-                  setActiveIndex(i);
-                }}
-                style={{
-                  // Lebar minimum 2px agar kata sependek "a" tetap bisa diklik;
-                  // tanpa itu, kata cepat menjadi garis tak terlihat.
-                  width: `${Math.max(2, span * 14)}px`,
-                  minWidth: 2,
-                  border: "none",
-                  cursor: "pointer",
-                  background: isActive ? "var(--accent)" : "var(--ink)",
-                  opacity: isActive ? 1 : 0.55,
-                  padding: 0,
-                }}
-                aria-label={`Lompat ke ${w.text} pada ${w.start_s.toFixed(1)} detik`}
-              />
-            );
-          })}
-        </div>
-        <p className="muted" style={{ fontSize: "0.7rem", marginTop: "0.35rem" }}>
-          Klik blok untuk melompat ke kata tersebut.
-        </p>
+          onEdit={(index) => {
+            // Edit dari timeline: pastikan barisnya ada di daftar (filter
+            // dilepas) dan daftar menggulir ke sana.
+            setFilter("");
+            setActiveIndex(index);
+            setAutoScroll(true);
+            startEdit(index, words[index].text);
+          }}
+        />
       </section>
 
       {/* --- Kolom kanan: daftar kata yang dapat diedit --- */}
@@ -289,7 +263,7 @@ export default function TranscriptEditor({ jobId }: Props) {
             type="button"
             onClick={() => setAutoScroll((v) => !v)}
             title="Hentikan gulir otomatis agar daftar tidak melompat saat Anda mengedit"
-            style={{ fontSize: "0.68rem", padding: "0.25rem 0.55rem" }}
+            style={{ fontSize: "0.72rem", padding: "0.25rem 0.55rem" }}
           >
             {autoScroll ? "Gulir otomatis: aktif" : "Gulir otomatis: mati"}
           </button>
@@ -350,7 +324,7 @@ export default function TranscriptEditor({ jobId }: Props) {
                     border: "none",
                     cursor: "pointer",
                     color: "var(--muted-ink)",
-                    fontSize: "0.65rem",
+                    fontSize: "0.75rem",
                     minWidth: "3.2rem",
                     textAlign: "left",
                     padding: 0,
@@ -379,7 +353,7 @@ export default function TranscriptEditor({ jobId }: Props) {
                       type="button"
                       onClick={() => void commitEdit(index)}
                       disabled={state === "saving"}
-                      style={{ fontSize: "0.66rem", padding: "0.2rem 0.5rem" }}
+                      style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
                     >
                       {state === "saving" ? "…" : "Simpan"}
                     </button>
@@ -387,7 +361,7 @@ export default function TranscriptEditor({ jobId }: Props) {
                       className="btn"
                       type="button"
                       onClick={cancelEdit}
-                      style={{ fontSize: "0.66rem", padding: "0.2rem 0.5rem" }}
+                      style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
                     >
                       Batal
                     </button>
@@ -416,12 +390,12 @@ export default function TranscriptEditor({ jobId }: Props) {
                 {/* Penanda penyimpanan: pengguna harus bisa membedakan "terlihat
                     berubah" dari "benar-benar tersimpan". */}
                 {state === "saved" ? (
-                  <span className="mono" style={{ fontSize: "0.62rem", color: "var(--ink)" }}>
+                  <span className="mono" style={{ fontSize: "0.75rem", color: "var(--ink)" }}>
                     tersimpan
                   </span>
                 ) : null}
                 {state === "error" ? (
-                  <span className="mono" style={{ fontSize: "0.62rem", color: "#b00020" }}>
+                  <span className="mono" style={{ fontSize: "0.75rem", color: "#b00020" }}>
                     gagal
                   </span>
                 ) : null}

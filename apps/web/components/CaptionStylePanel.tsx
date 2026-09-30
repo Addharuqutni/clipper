@@ -33,7 +33,7 @@ function SliderRow({
   return (
     <div style={{ marginBottom: "0.7rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <label className="label" htmlFor={`cap-${label}`} style={{ fontSize: "0.68rem" }}>
+        <label className="label" htmlFor={`cap-${label}`}>
           {label}
         </label>
         <span className="mono" style={{ fontSize: "0.78rem", fontWeight: 900 }}>
@@ -51,7 +51,7 @@ function SliderRow({
         style={{ width: "100%" }}
       />
       {hint ? (
-        <p className="muted" style={{ fontSize: "0.62rem", margin: "0.1rem 0 0" }}>{hint}</p>
+        <p className="hint" style={{ margin: "0.1rem 0 0" }}>{hint}</p>
       ) : null}
     </div>
   );
@@ -75,7 +75,7 @@ function ColorRow({
         marginBottom: "0.55rem",
       }}
     >
-      <label className="label" htmlFor={`col-${label}`} style={{ fontSize: "0.68rem" }}>
+      <label className="label" htmlFor={`col-${label}`}>
         {label}
       </label>
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -91,7 +91,7 @@ function ColorRow({
             cursor: "pointer",
           }}
         />
-        <span className="mono" style={{ fontSize: "0.66rem", minWidth: "4.4rem" }}>
+        <span className="mono" style={{ fontSize: "0.75rem", minWidth: "4.4rem" }}>
           {value}
         </span>
       </div>
@@ -260,12 +260,17 @@ export default function CaptionStylePanel({ jobId }: Props) {
         </p>
       ) : null}
 
-      <div className="split" style={{ alignItems: "start" }}>
-        <section>
-          <CaptionPreview style={style} />
-
-          <div className="panel" style={{ marginTop: "0.85rem" }}>
-            <div className="label" style={{ fontSize: "0.68rem" }}>Asal gaya</div>
+      {/* split-lead: pratinjau 9:16 di kolom sempit (--aside-w). Di kolom 1fr
+          tingginya ikut lebar layar sehingga kotak pratinjau menjadi raksasa. */}
+      <div className="split split-lead">
+        {/* Hanya pratinjau yang menempel saat digulir. Jika seluruh kolom
+            (pratinjau + "Asal gaya") yang sticky, tingginya melebihi ruang di
+            bawah header, sehingga di akhir gulir bagian atasnya terdorong ke
+            balik header. Section direntangkan setinggi baris agar pratinjau
+            punya ruang menempel sepanjang kolom kontrol. */}
+        <section style={{ position: "static", alignSelf: "stretch" }}>
+          <div className="panel" style={{ marginBottom: "0.85rem" }}>
+            <div className="label">Asal gaya</div>
             <div className="mono" style={{ fontSize: "0.72rem", marginTop: "0.25rem" }}>
               {source === "job"
                 ? "khusus video ini"
@@ -273,14 +278,15 @@ export default function CaptionStylePanel({ jobId }: Props) {
                   ? `preset "${presetName ?? "-"}"`
                   : "bawaan sistem"}
             </div>
-            <p
-              className="muted"
-              style={{ fontSize: "0.68rem", marginTop: "0.35rem", marginBottom: 0 }}
-            >
+            <p className="hint" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
               {source === "job"
                 ? "Gaya ini hanya berlaku pada video ini."
                 : "Gaya ini berlaku pada semua video yang tidak punya pengaturan sendiri."}
             </p>
+          </div>
+
+          <div style={{ position: "sticky", top: "6rem" }}>
+            <CaptionPreview style={style} />
           </div>
         </section>
 
@@ -328,7 +334,7 @@ export default function CaptionStylePanel({ jobId }: Props) {
                   type="button"
                   disabled={busy}
                   onClick={() => void makeDefault(p)}
-                  style={{ fontSize: "0.62rem", padding: "0.15rem 0.45rem" }}
+                  style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem" }}
                 >
                   Jadikan bawaan
                 </button>
@@ -338,7 +344,7 @@ export default function CaptionStylePanel({ jobId }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => void removePreset(p)}
-                style={{ fontSize: "0.62rem", padding: "0.15rem 0.45rem" }}
+                style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem" }}
                 aria-label={`Hapus preset ${p.name}`}
               >
                 Hapus
@@ -373,7 +379,7 @@ export default function CaptionStylePanel({ jobId }: Props) {
             }}
           />
 
-          <label className="label" htmlFor="cap-font" style={{ fontSize: "0.68rem" }}>
+          <label className="label" htmlFor="cap-font">
             Font
           </label>
           <select
@@ -397,7 +403,7 @@ export default function CaptionStylePanel({ jobId }: Props) {
             }}
           />
 
-          <label className="label" htmlFor="cap-anim" style={{ fontSize: "0.68rem" }}>
+          <label className="label" htmlFor="cap-anim">
             Animasi
           </label>
           <select
@@ -504,7 +510,7 @@ export default function CaptionStylePanel({ jobId }: Props) {
             </label>
           </div>
 
-          <div className="label" style={{ fontSize: "0.68rem" }}>Warna</div>
+          <div className="label">Warna</div>
           <div style={{ marginTop: "0.4rem" }}>
             <ColorRow
               label="Teks"
@@ -543,8 +549,8 @@ export default function CaptionStylePanel({ jobId }: Props) {
 
           {dirty ? (
             <p
-              className="mono"
-              style={{ fontSize: "0.68rem", color: "var(--ink)", margin: "0.6rem 0 0" }}
+              className="hint"
+              style={{ color: "var(--ink)", margin: "0.6rem 0 0" }}
               role="status"
             >
               Ada perubahan yang belum diterapkan.

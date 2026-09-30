@@ -70,7 +70,7 @@ export default function FontUploader({ fonts, onChanged }: Props) {
             style={{ display: "none" }}
           />
         </label>
-        <span className="muted" style={{ fontSize: "0.66rem" }}>
+        <span className="hint" style={{ margin: 0 }}>
           Maks 20 MB
         </span>
       </div>
@@ -81,7 +81,7 @@ export default function FontUploader({ fonts, onChanged }: Props) {
         </p>
       ) : null}
       {message ? (
-        <p className="mono" role="status" style={{ fontSize: "0.66rem", marginTop: "0.4rem" }}>
+        <p className="hint" role="status" style={{ marginTop: "0.4rem" }}>
           {message}
         </p>
       ) : null}
@@ -100,7 +100,7 @@ export default function FontUploader({ fonts, onChanged }: Props) {
               }}
             >
               <span style={{ flex: 1 }}>{font.family}</span>
-              <span className="muted mono" style={{ fontSize: "0.6rem" }}>
+              <span className="muted mono" style={{ fontSize: "0.75rem" }}>
                 {(font.size_bytes / 1024).toFixed(0)} KB
               </span>
               <button
@@ -108,7 +108,7 @@ export default function FontUploader({ fonts, onChanged }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => void remove(font)}
-                style={{ fontSize: "0.6rem", padding: "0.1rem 0.4rem" }}
+                style={{ fontSize: "0.72rem", padding: "0.1rem 0.4rem" }}
                 aria-label={`Hapus font ${font.family}`}
               >
                 Hapus

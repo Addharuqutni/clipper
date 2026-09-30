@@ -315,7 +315,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
             );
           })}
         </div>
-        <div className="mono" style={{ fontSize: "0.6rem", marginTop: "1rem", opacity: 0.7 }}>
+        <div className="mono" style={{ fontSize: "0.75rem", marginTop: "1rem", opacity: 0.7 }}>
           Total durasi segmen {durationS.toFixed(1)}s · {placements.length} overlay
         </div>
       </div>
@@ -336,7 +336,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void remove(selected)}
-              style={{ fontSize: "0.62rem", padding: "0.15rem 0.45rem" }}
+              style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem" }}
             >
               Hapus
             </button>
@@ -344,7 +344,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
 
           <div className="grid grid-2" style={{ gap: "0.6rem", marginTop: "0.5rem" }}>
             <div>
-              <label className="label" htmlFor={fid("start")} style={{ fontSize: "0.62rem" }}>
+              <label className="label" htmlFor={fid("start")}>
                 Mulai (s)
               </label>
               <input
@@ -362,7 +362,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
               />
             </div>
             <div>
-              <label className="label" htmlFor={fid("end")} style={{ fontSize: "0.62rem" }}>
+              <label className="label" htmlFor={fid("end")}>
                 Selesai (s)
               </label>
               <input
@@ -382,7 +382,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
           </div>
 
           <div style={{ marginTop: "0.5rem" }}>
-            <label className="label" htmlFor={fid("pos")} style={{ fontSize: "0.62rem" }}>
+            <label className="label" htmlFor={fid("pos")}>
               Posisi
             </label>
             <select
@@ -404,7 +404,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
 
           <div className="grid grid-2" style={{ gap: "0.6rem", marginTop: "0.5rem" }}>
             <div>
-              <label className="label" htmlFor={fid("scale")} style={{ fontSize: "0.62rem" }}>
+              <label className="label" htmlFor={fid("scale")}>
                 Ukuran ({(draft.scale * 100).toFixed(0)}% lebar)
               </label>
               <input
@@ -421,7 +421,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
               />
             </div>
             <div>
-              <label className="label" htmlFor={fid("opacity")} style={{ fontSize: "0.62rem" }}>
+              <label className="label" htmlFor={fid("opacity")}>
                 Opasitas ({draft.opacity}%)
               </label>
               <input
@@ -440,7 +440,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
           </div>
 
           <div style={{ marginTop: "0.5rem" }}>
-            <label className="label" htmlFor={fid("trans")} style={{ fontSize: "0.62rem" }}>
+            <label className="label" htmlFor={fid("trans")}>
               Transisi
             </label>
             <select
@@ -464,7 +464,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
 
       {/* --- Pustaka aset --- */}
       <div style={{ marginTop: "0.9rem" }}>
-        <div className="label" style={{ fontSize: "0.68rem" }}>Pustaka aset</div>
+        <div className="label">Pustaka aset</div>
 
         <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem", flexWrap: "wrap" }}>
           <input
@@ -483,7 +483,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
             style={{ flex: "2 1 12rem", fontSize: "0.72rem" }}
             aria-label="Kata kunci pemicu"
           />
-          <label className="btn" style={{ cursor: busy ? "wait" : "pointer", fontSize: "0.68rem" }}>
+          <label className="btn" style={{ cursor: busy ? "wait" : "pointer", fontSize: "0.72rem" }}>
             {busy ? "…" : "Unggah"}
             <input
               type="file"
@@ -498,7 +498,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
             />
           </label>
         </div>
-        <p className="muted" style={{ fontSize: "0.62rem", marginTop: "0.3rem" }}>
+        <p className="hint" style={{ marginTop: "0.3rem" }}>
           Kata kunci dipakai tombol &quot;Usulkan otomatis&quot; untuk menandai saat aset
           sebaiknya muncul.
         </p>
@@ -531,7 +531,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void place(asset)}
-              style={{ fontSize: "0.6rem", padding: "0.12rem 0.4rem" }}
+              style={{ fontSize: "0.72rem", padding: "0.12rem 0.4rem" }}
             >
               Tempatkan
             </button>
@@ -540,7 +540,7 @@ export default function OverlayTimeline({ segmentId, durationS }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void removeAsset(asset)}
-              style={{ fontSize: "0.6rem", padding: "0.12rem 0.4rem" }}
+              style={{ fontSize: "0.72rem", padding: "0.12rem 0.4rem" }}
               aria-label={`Hapus aset ${asset.name}`}
             >
               Hapus

@@ -206,7 +206,7 @@ export default function AiProviderForm() {
           )}
         </div>
 
-        <p className="mono" style={{ fontSize: "0.72rem", margin: "0.4rem 0 0.75rem", color: "var(--muted-ink)" }}>
+        <p className="hint" style={{ margin: "0.4rem 0 0.75rem" }}>
           Konfigurasi AI terdiri dari <strong>BaseUrl</strong>, <strong>Apikey</strong>, dan <strong>Model</strong>.
         </p>
 
@@ -238,7 +238,7 @@ export default function AiProviderForm() {
           onChange={(e) => update({ baseUrl: e.target.value })}
           style={{ marginTop: "0.35rem" }}
         />
-        <p className="mono" style={{ fontSize: "0.66rem", margin: "0.35rem 0 0" }}>
+        <p className="hint">
           Endpoint LLM (mis. https://generativelanguage.googleapis.com/v1beta/openai atau https://api.openai.com/v1).
         </p>
 
@@ -255,7 +255,7 @@ export default function AiProviderForm() {
           onChange={(e) => update({ apiKey: e.target.value })}
           style={{ marginTop: "0.35rem" }}
         />
-        <p className="mono" style={{ fontSize: "0.66rem", margin: "0.35rem 0 0" }}>
+        <p className="hint">
           {statusLabel}. Nilai tidak pernah dikembalikan ke browser demi keamanan.
         </p>
 
@@ -270,7 +270,7 @@ export default function AiProviderForm() {
           onChange={(e) => update({ model: e.target.value })}
           style={{ marginTop: "0.35rem" }}
         />
-        <p className="mono" style={{ fontSize: "0.66rem", margin: "0.35rem 0 0" }}>
+        <p className="hint">
           Nama model LLM yang ingin digunakan (mis. gemini-2.5-flash, gpt-4o-mini, llama-3.3-70b-versatile).
         </p>
 
@@ -300,7 +300,7 @@ export default function AiProviderForm() {
           onChange={(e) => update({ direction: e.target.value })}
           style={{ marginTop: "0.35rem" }}
         />
-        <p className="mono" style={{ fontSize: "0.66rem", margin: "0.35rem 0 0" }}>
+        <p className="hint">
           Ditambahkan ke setiap permintaan skoring.
         </p>
 
@@ -318,7 +318,7 @@ export default function AiProviderForm() {
           onChange={(e) => update({ contextTokens: e.target.value })}
           style={{ marginTop: "0.35rem" }}
         />
-        <p className="mono" style={{ fontSize: "0.66rem", margin: "0.35rem 0 0" }}>
+        <p className="hint">
           Kosongkan agar dideteksi dari penyedia saat Simpan. Isi hanya bila
           penyedia tidak melaporkannya. Menentukan durasi video maksimum.
         </p>
@@ -403,7 +403,7 @@ export default function AiProviderForm() {
         ) : null}
 
         {saved?.updated_at ? (
-          <p className="mono" style={{ fontSize: "0.66rem", marginTop: "1rem", marginBottom: 0 }}>
+          <p className="hint" style={{ marginTop: "1rem", marginBottom: 0 }}>
             terakhir diubah: {new Date(saved.updated_at).toLocaleString("id-ID")}
           </p>
         ) : null}

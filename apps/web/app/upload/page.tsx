@@ -41,17 +41,17 @@ export default function UploadPage() {
                   padding: "0.5rem 0",
                 }}
               >
-                <dt className="muted" style={{ fontSize: "0.75rem", margin: 0 }}>
+                <dt className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
                   {r.k}
                 </dt>
-                <dd className="mono" style={{ fontSize: "0.75rem", margin: 0, fontWeight: 900 }}>
+                <dd className="mono" style={{ fontSize: "0.82rem", margin: 0, textAlign: "right" }}>
                   {r.v}
                 </dd>
               </div>
             ))}
           </dl>
 
-          <p className="mono" style={{ fontSize: "0.68rem", marginTop: "1rem", marginBottom: 0 }}>
+          <p className="hint" style={{ marginTop: "1rem" }}>
             Berkas mentah dihapus otomatis 48 jam setelah render terakhir selesai.
           </p>
         </aside>

@@ -145,7 +145,7 @@ export default function CropModeSelector({
       ) : null}
 
       {preview ? (
-        <p className="mono" style={{ fontSize: "0.68rem", margin: "0.75rem 0 0" }}>
+        <p className="mono" style={{ fontSize: "0.75rem", margin: "0.75rem 0 0" }}>
           {preview.source_width}×{preview.source_height} → {preview.output_width}×
           {preview.output_height}
           {preview.bar_height_top > 0

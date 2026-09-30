@@ -118,7 +118,7 @@ export default function JobLogPanel({ jobId, status }: Props) {
               className="btn"
               type="button"
               onClick={() => setAutoRefresh((v) => !v)}
-              style={{ fontSize: "0.62rem", padding: "0.2rem 0.5rem" }}
+              style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
               title="Muat ulang otomatis setiap 5 detik selama job berjalan"
             >
               {autoRefresh ? "Pantau: aktif" : "Pantau: mati"}
@@ -128,7 +128,7 @@ export default function JobLogPanel({ jobId, status }: Props) {
             className="btn"
             type="button"
             onClick={() => void load()}
-            style={{ fontSize: "0.62rem", padding: "0.2rem 0.5rem" }}
+            style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
           >
             Muat ulang
           </button>
@@ -179,7 +179,7 @@ export default function JobLogPanel({ jobId, status }: Props) {
               <span
                 className="mono"
                 style={{
-                  fontSize: "0.62rem",
+                  fontSize: "0.75rem",
                   color: "#8a8a8a",
                   minWidth: "4.2rem",
                   textAlign: "right",
@@ -192,7 +192,7 @@ export default function JobLogPanel({ jobId, status }: Props) {
               <span
                 className="mono"
                 style={{
-                  fontSize: "0.6rem",
+                  fontSize: "0.75rem",
                   color: STAGE_COLOR[entry.stage] ?? "#dcdcdc",
                   minWidth: "4.6rem",
                   flexShrink: 0,
@@ -204,7 +204,7 @@ export default function JobLogPanel({ jobId, status }: Props) {
               <span
                 className="mono"
                 style={{
-                  fontSize: "0.68rem",
+                  fontSize: "0.75rem",
                   color: "#e8e8e8",
                   // Pesan boleh membungkus: memotongnya dengan ellipsis akan
                   // menyembunyikan justru bagian yang menjelaskan kegagalan.
@@ -216,14 +216,14 @@ export default function JobLogPanel({ jobId, status }: Props) {
             </div>
           ))}
           {!visible.length ? (
-            <p className="mono" style={{ fontSize: "0.68rem", color: "#8a8a8a", margin: 0 }}>
+            <p className="hint" style={{ color: "#8a8a8a", margin: 0 }}>
               Tidak ada baris yang cocok dengan &quot;{filter}&quot;.
             </p>
           ) : null}
         </div>
       )}
 
-      <p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.45rem", marginBottom: 0 }}>
+      <p className="hint" style={{ marginTop: "0.45rem", marginBottom: 0 }}>
         Waktu dihitung sebagai selisih dari baris pertama, bukan jam absolut —
         supaya durasi tiap tahap langsung terbaca.
       </p>

@@ -40,14 +40,38 @@ export default function AiReadinessNotice() {
     // Belum ada peringatan saat memuat: menampilkan lalu menghilangkannya
     // terlihat seperti kedipan yang mengganggu.
     if (status === "ready" && settings) {
+      const rows = [
+        { k: "Penyedia", v: settings.preset },
+        { k: "BaseUrl", v: settings.base_url ?? "—" },
+        { k: "Model", v: settings.model ?? "—" },
+        // Tanpa kunci bukan kesalahan pasti: endpoint lokal (Ollama) tidak memerlukannya.
+        { k: "API key", v: settings.has_api_key ? "tersimpan" : "tidak ada" },
+        { k: "Durasi maks", v: `${settings.max_video_minutes} menit` },
+      ];
       return (
-        <p className="mono" style={{ fontSize: "0.66rem", margin: 0 }}>
-          Bring Your API Key: {settings.preset}
-          {settings.base_url ? ` | BaseUrl: ${settings.base_url}` : ""}
-          {settings.model ? ` | Model: ${settings.model}` : ""}
-          {settings.has_api_key ? " (Apikey tersimpan)" : " — Apikey belum diisi"}
-          {` | Durasi video maks: ${settings.max_video_minutes} menit`}
-        </p>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "0.5rem 1.25rem",
+            border: "var(--bw-thin) solid var(--ink)",
+            background: "var(--panel)",
+            padding: "0.55rem 0.85rem",
+            fontSize: "0.82rem",
+          }}
+        >
+          <span className="label">AI dikonfigurasi</span>
+          {rows.map((r) => (
+            <span key={r.k} style={{ minWidth: 0 }}>
+              <span className="muted">{r.k}: </span>
+              <span className="mono">{r.v}</span>
+            </span>
+          ))}
+          <Link href="/settings" style={{ marginLeft: "auto", fontWeight: 700 }}>
+            Ubah
+          </Link>
+        </div>
       );
     }
     return null;

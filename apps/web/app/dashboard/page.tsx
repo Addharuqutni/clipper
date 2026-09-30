@@ -62,6 +62,34 @@ function TableSkeleton() {
   );
 }
 
+/** Waktu relatif singkat ("5 mnt lalu"); tanggal penuh ada di atribut title. */
+function relativeTime(iso: string, now: number): string {
+  const diffS = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  if (!Number.isFinite(diffS)) return "—";
+  if (diffS < 60) return "baru saja";
+  const m = Math.floor(diffS / 60);
+  if (m < 60) return `${m} mnt lalu`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} jam lalu`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} hari lalu`;
+  return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Penanda sumber yang bisa dikenali manusia: ID video YouTube atau host. */
+function sourceHint(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const v = u.searchParams.get("v");
+    if (v) return v;
+    const last = u.pathname.split("/").filter(Boolean).pop();
+    return last ?? u.host;
+  } catch {
+    return null;
+  }
+}
+
 export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +140,7 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [active, load]);
 
-  if (jobs === null && !error) return <TableSkeleton />;
+  const now = Date.now();
 
   const total = list.length;
   const done = list.filter((j) => j.status === "done").length;
@@ -122,9 +150,9 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
+          <h1 style={{ margin: 0 }}>Dashboard</h1>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             className="btn"
             type="button"
@@ -134,21 +162,25 @@ export default function Dashboard() {
           >
             {refreshing ? "Memuat…" : "Muat ulang"}
           </button>
-          <Link href="/upload" className="btn btn-primary">
+          <Link href="/youtube" className="btn btn-primary">
             Buat job baru
           </Link>
         </div>
       </div>
 
+      {jobs === null && !error ? <TableSkeleton /> : null}
+
       {error ? (
         <div className="alert" role="alert" style={{ margin: 0 }}>
           <div>{error}</div>
-          <button type="button" className="btn" onClick={() => void load()} style={{ marginTop: "0.5rem" }}>
+          <button type="button" className="btn" onClick={() => void load()} style={{ marginTop: "0.6rem" }}>
             Coba lagi
           </button>
         </div>
       ) : null}
 
+      {jobs === null ? null : (
+      <>
       <div className="grid grid-4">
         <StatBlock label="Total job" value={total} bg="var(--panel)" />
         <StatBlock label="Sedang diproses" value={active} bg="var(--blue)" />
@@ -157,7 +189,7 @@ export default function Dashboard() {
       </div>
 
       <div style={{ minWidth: 0 }}>
-          <h2>Job terbaru</h2>
+          <h2 style={{ margin: "0.5rem 0 0.9rem" }}>Job terbaru</h2>
 
           {total === 0 && !error ? (
             // Keadaan kosong yang menjelaskan langkah berikutnya, bukan layar
@@ -191,6 +223,9 @@ export default function Dashboard() {
                   <th scope="col">Tahap</th>
                   <th scope="col">Progres</th>
                   <th scope="col">Status</th>
+                  <th scope="col">
+                    <span className="sr-only">Aksi</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +241,19 @@ export default function Dashboard() {
                       </Link>
                     </td>
                     <td data-label="Sumber">
-                      <span className={`tag tag-${job.source_type}`}>{job.source_type}</span>
+                      {(() => {
+                        const hint = sourceHint(job.source_url);
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", minWidth: 0 }}>
+                            <span className={`tag tag-${job.source_type}`}>{job.source_type}</span>
+                            {hint ? (
+                              <span className="mono muted" style={{ fontSize: "0.75rem" }} title={job.source_url ?? undefined}>
+                                {hint}
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td data-label="Tahap">
                       {job.status === "running" && job.stage === "render" ? (
@@ -222,7 +269,7 @@ export default function Dashboard() {
                         <div className="progress" style={{ flex: 1 }}>
                           <div
                             className="progress-fill"
-                            style={{ width: `${Math.max(0, Math.min(100, job.progress))}%` }}
+                            style={{ "--pct": Math.max(0, Math.min(100, job.progress)) } as React.CSSProperties}
                           />
                         </div>
                         <span className="mono" style={{ fontSize: "0.75rem", minWidth: 34 }}>
@@ -230,13 +277,25 @@ export default function Dashboard() {
                         </span>
                       </div>
                       {job.error ? (
-                        <div className="muted" style={{ fontSize: "0.72rem", marginTop: "0.3rem" }}>
+                        <div style={{ fontSize: "0.78rem", marginTop: "0.35rem", color: "#9b1030", fontWeight: 600 }}>
                           {job.error}
                         </div>
                       ) : null}
                     </td>
                     <td data-label="Status">
-                      <span className={badgeClass(job.status)}>{STATUS_LABEL[job.status] ?? job.status}</span>
+                      <div>
+                        <span className={badgeClass(job.status)}>{STATUS_LABEL[job.status] ?? job.status}</span>
+                        <div className="muted" style={{ fontSize: "0.75rem", marginTop: "0.3rem" }}>
+                          <time dateTime={job.created_at} title={new Date(job.created_at).toLocaleString("id-ID")}>
+                            {relativeTime(job.created_at, now)}
+                          </time>
+                        </div>
+                      </div>
+                    </td>
+                    <td data-label="Aksi" style={{ textAlign: "right" }}>
+                      <Link href={`/jobs/${job.id}`} className="btn" style={{ minHeight: 36, padding: "0.4rem 0.8rem" }}>
+                        Buka
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -244,6 +303,8 @@ export default function Dashboard() {
             </table>
           )}
       </div>
+      </>
+      )}
     </div>
   );
 }

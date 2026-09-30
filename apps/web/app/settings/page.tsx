@@ -25,16 +25,16 @@ export default function SettingsPage() {
       <section className="panel">
         <div className="label">Mengapa ini dapat diubah?</div>
         <ul style={{ paddingLeft: "1.1rem", margin: "0.75rem 0 0" }}>
-          <li className="muted" style={{ fontSize: "0.82rem", marginBottom: "0.45rem" }}>
+          <li className="muted" style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
             Kami tidak dapat menjamin satu penyedia selalu tersedia. Jika salah
             satu sedang gangguan, Anda tetap bisa bekerja.
           </li>
-          <li className="muted" style={{ fontSize: "0.82rem", marginBottom: "0.45rem" }}>
+          <li className="muted" style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
             Biaya per pemrosesan berbeda jauh antar penyedia, dan model lokal
             menghilangkan biaya per panggilan sekaligus menjaga transkrip tetap
             di komputer Anda.
           </li>
-          <li className="muted" style={{ fontSize: "0.82rem" }}>
+          <li className="muted" style={{ fontSize: "0.9rem" }}>
             Endpoint harus kompatibel dengan gaya OpenAI (<code>/chat/completions</code>),
             yang dipenuhi hampir semua penyedia LLM saat ini.
           </li>

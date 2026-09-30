@@ -84,6 +84,11 @@ export default function CaptionPreview({ style, sample }: Props) {
         style={{
           position: "relative",
           width: "100%",
+          // Dibatasi lewat lebar (bukan maxHeight) agar rasio 9:16 tetap utuh:
+          // scale, bottom, dan margin_side dihitung dari clientWidth. Batas vh
+          // menjaga kotak + panel di bawahnya muat di layar laptop pendek.
+          maxWidth: "min(100%, 220px, calc((100vh - 16rem) * 9 / 16))",
+          margin: "0 auto",
           // 9:16 — sama dengan klip keluaran.
           aspectRatio: "9 / 16",
           background: "linear-gradient(160deg, #2b2b2b, #101010)",
@@ -176,11 +181,11 @@ export default function CaptionPreview({ style, sample }: Props) {
         />
       </div>
 
-      <p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.4rem" }}>
+      <p className="hint" style={{ marginTop: "0.4rem" }}>
         Pratinjau perkiraan. Pembungkusan baris dan metrik font bisa berbeda
         sedikit dari hasil render FFmpeg.
       </p>
-      <div className="mono" style={{ fontSize: "0.6rem", opacity: 0.7 }}>
+      <div className="mono" style={{ fontSize: "0.75rem", opacity: 0.7 }}>
         {Math.round(boxWidth)}px lebar pratinjau · {style.animation}
         {animationClass ? " (beranimasi)" : ""}
       </div>
