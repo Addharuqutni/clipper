@@ -104,6 +104,7 @@ def test_unggahan_resume_lalu_complete_memulai_ingest(client: TestClient, submit
     assert client.put(f"/api/v1/uploads/{upload_id}/parts/2", content=data[part:]).status_code == 204
     done = client.post(f"/api/v1/uploads/{upload_id}/complete")
     assert done.status_code == 200, done.text
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "video.mp4"
     assert submitted[-1] == ("worker_light.tasks.ingest_media", job_id, "upload", None)
 
     from clipper_shared import storage as layout
@@ -113,6 +114,78 @@ def test_unggahan_resume_lalu_complete_memulai_ingest(client: TestClient, submit
         cur.execute("SELECT r2_key FROM source_media WHERE job_id = %s", (job_id,))
         (key,) = cur.fetchone()
     assert layout.object_path(layout.RAW, key).read_bytes() == data
+
+
+def test_unggahan_mengisi_judul_dari_nama_berkas_dan_resume_mempertahankannya(client: TestClient) -> None:
+    """Judul job unggahan = nama berkas, ditetapkan saat init dan TIDAK berubah saat resume."""
+    job_id = _create_upload_job(client)
+    # Job baru belum tahu judul apa pun sampai berkasnya dipilih.
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] is None
+
+    data = b"a" * 64
+    init = client.post(
+        "/api/v1/uploads/init",
+        json={"job_id": job_id, "filename": "rekaman-podcast.mp4", "size_bytes": len(data)},
+    )
+    assert init.status_code == 201, init.text
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "rekaman-podcast.mp4"
+
+    # Resume dianggap berkas yang sama (job + ukuran): judul dari manifest
+    # dipertahankan walau request resume menyebut nama lain.
+    resumed = client.post(
+        "/api/v1/uploads/init",
+        json={"job_id": job_id, "filename": "nama-lain.mp4", "size_bytes": len(data)},
+    )
+    assert resumed.status_code == 201, resumed.text
+    assert resumed.json()["upload_id"] == init.json()["upload_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "rekaman-podcast.mp4"
+
+
+def test_unggahan_baru_setelah_dibatalkan_memperbarui_judul(client: TestClient) -> None:
+    """Berkas pengganti tidak boleh tampil di dashboard dengan nama berkas lama."""
+    job_id = _create_upload_job(client)
+    pertama = client.post(
+        "/api/v1/uploads/init",
+        json={"job_id": job_id, "filename": "versi-lama.mp4", "size_bytes": 100},
+    )
+    assert pertama.status_code == 201, pertama.text
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "versi-lama.mp4"
+
+    assert client.delete(f"/api/v1/uploads/{pertama.json()['upload_id']}").status_code == 204
+
+    kedua = client.post(
+        "/api/v1/uploads/init",
+        json={"job_id": job_id, "filename": "versi-baru.mp4", "size_bytes": 200},
+    )
+    assert kedua.status_code == 201, kedua.text
+    assert kedua.json()["upload_id"] != pertama.json()["upload_id"]
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "versi-baru.mp4"
+
+
+def test_judul_youtube_dari_metadata_worker_muncul_di_respons_job(client: TestClient) -> None:
+    """Judul yang ditulis worker (``YoutubeMetadata.title``) terbaca lewat GET /jobs/{id}."""
+    from worker_light import storage
+
+    job_id = client.post(
+        "/api/v1/jobs", json={"source_type": "youtube", "source_url": "https://youtu.be/dQw4w9WgXcQ"}
+    ).json()["id"]
+    # Judul YouTube baru diketahui saat ingest; sebelumnya harus null.
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] is None
+
+    storage.record_source_media(
+        job_id=job_id,
+        r2_key="raw/job/video.mp4",
+        size_bytes=1024,
+        duration_s=60.0,
+        width=1920,
+        height=1080,
+        codec="h264",
+        language=None,
+        transcript_source=None,
+        video_title="Judul Video YouTube",
+    )
+
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["video_title"] == "Judul Video YouTube"
 
 
 def test_job_berjalan_ditandai_gagal_saat_startup_dan_bisa_diulang(submitted: list[tuple[Any, ...]], monkeypatch: pytest.MonkeyPatch) -> None:

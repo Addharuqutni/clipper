@@ -22,7 +22,7 @@ repo bisa dipindah tanpa mengedit `.env`.
 | Variabel | Bawaan |
 |---|---|
 | `LOCAL_STORAGE_DIR` | `output` (SQLite + semua media) |
-| `CLIPS_OUTPUT_DIR` | `output/clips` |
+| `CLIPS_OUTPUT_DIR` | `output/clips` (subfolder `<job_id>` dibuat otomatis) |
 | `WORKER_WORKSPACE_DIR` | `.work` |
 | `WHISPER_MODEL_CACHE_DIR` | `.models` |
 | `FACE_LANDMARKER_MODEL` | `.models/face_landmarker.task` |

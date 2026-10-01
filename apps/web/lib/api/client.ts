@@ -246,7 +246,7 @@ export const api = {
   /** Jalankan ulang analisis AI memakai transkrip yang sudah ada. */
   rescoreJob: (id: string) => request<Job>(`/jobs/${id}/rescore`, { method: "POST" }),
   cancelJob: (id: string) => request<Job>(`/jobs/${id}/cancel`, { method: "POST" }),
-  /** Hapus job beserta media dan hasil render (salinan di output/clips tetap). */
+  /** Hapus job beserta media dan hasil render (salinan di output/clips/<job_id> tetap). */
   deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
   submitYoutube: (url: string, clipCount = 5, language: JobLanguage = "id") =>
     request<Job>("/jobs", {

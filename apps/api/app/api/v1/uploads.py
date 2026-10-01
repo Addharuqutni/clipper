@@ -107,6 +107,27 @@ async def _owned_manifest(db: DbSession, user_id: Any, upload_id: str) -> tuple[
     return manifest, await get_owned_job(db, user_id, UUID(manifest["job_id"]))
 
 
+async def _remember_video_title(db: DbSession, job: Job, filename: str, *, overwrite: bool = False) -> None:
+    """Simpan nama berkas sebagai ``job.video_title``, lalu commit bila berubah.
+
+    ``overwrite=False`` (resume): judul yang sudah ada dipertahankan — resume
+    memakai berkas yang sama, dan judul yang tampil di dashboard tidak boleh
+    berubah hanya karena request menyebut nama lain. Nama diambil dari manifest,
+    karena itulah nama yang dirakit dan dicatat pada
+    ``source_media.original_filename``.
+
+    ``overwrite=True`` (unggahan baru): nama berkas terbaru menang — setelah
+    unggahan sebelumnya dibatalkan dan diganti berkas lain, dashboard tidak boleh
+    menampilkan nama berkas lama.
+    """
+    if job.video_title and not overwrite:
+        return
+    if job.video_title == filename:
+        return
+    job.video_title = filename
+    await db.commit()
+
+
 @router.post("/init", response_model=InitUploadResponse, status_code=status.HTTP_201_CREATED)
 async def init_upload(
     payload: InitUploadRequest, current_user: CurrentUserOrDev, db: DbSession
@@ -138,6 +159,7 @@ async def init_upload(
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest["job_id"] == str(job.id) and manifest["size_bytes"] == payload.size_bytes:
                 upload_id = manifest_path.parent.name
+                await _remember_video_title(db, job, str(manifest["filename"]))
                 return InitUploadResponse(
                     upload_id=upload_id,
                     part_size_bytes=manifest["part_size_bytes"],
@@ -156,6 +178,7 @@ async def init_upload(
     folder = _upload_dir(upload_id)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / _MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+    await _remember_video_title(db, job, payload.filename, overwrite=True)
     return InitUploadResponse(
         upload_id=upload_id,
         part_size_bytes=manifest["part_size_bytes"],
@@ -235,6 +258,9 @@ async def complete_upload(upload_id: str, current_user: CurrentUserOrDev, db: Db
             original_filename=manifest["filename"],
         )
     )
+    if not job.video_title:
+        # Jaring pengaman untuk unggahan yang dimulai sebelum kolom judul ada.
+        job.video_title = manifest["filename"]
     job.status = "queued"
     job.stage = "ingest"
     job.error = None

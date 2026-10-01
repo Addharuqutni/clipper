@@ -1,7 +1,7 @@
 """Model tabel ``jobs`` (TECH_SPEC §3).
 
-Kolom: id, user_id, source_type[upload|youtube], source_url, status, stage,
-progress, error, created_at, updated_at.
+Kolom: id, user_id, source_type[upload|youtube], source_url, video_title,
+status, stage, progress, error, created_at, updated_at.
 
 Indeks wajib: ``jobs(user_id, created_at DESC)``.
 """
@@ -49,6 +49,12 @@ class Job(Base):
     source_type: Mapped[str] = mapped_column(String(16), nullable=False)
     #: NULL untuk source_type='upload'.
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Judul video untuk dashboard. Sumbernya mengikuti jenis job: nama berkas
+    #: untuk unggahan (diisi API saat ``POST /uploads/init``) dan
+    #: ``YoutubeMetadata.title`` untuk YouTube (diisi worker saat ingest).
+    #: ``NULL`` = belum diketahui; job lama tetap sah tanpa kolom ini, dan
+    #: pembangunan ulang tabel SQLite mengisinya dengan NULL.
+    video_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: queued|running|done|failed|canceled — lifecycle tingkat job.
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
     #: Tahap detail: ingest|transcribe|analyze|render|done.

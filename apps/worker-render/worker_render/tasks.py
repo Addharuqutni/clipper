@@ -226,7 +226,7 @@ def _load_segment_overlays(segment_id: str) -> list[Any]:
 
 
 def _describe_clip(*, job_id: str, segment_id: str, label: str, kind: str, order: int = 1) -> str:
-    """Nama berkas deskriptif untuk salinan di ``output/clips``::
+    """Nama berkas deskriptif untuk salinan di folder output job::
 
         <job>_<segmen>_<urutan>_<slug-label>_<jenis>.mp4
     """
@@ -234,27 +234,39 @@ def _describe_clip(*, job_id: str, segment_id: str, label: str, kind: str, order
     return f"{str(job_id)[:8]}_{str(segment_id)[:8]}_{order:02d}_{slug or 'segmen'}_{kind}.mp4"
 
 
+def _job_clips_dir(job_id: str) -> Path:
+    """Direktori klip yang terlihat pengguna untuk satu job.
+
+    ID job berasal dari UUID API dan dipertahankan utuh sebagai satu komponen
+    path. Validasi ini mencegah nilai task yang rusak keluar dari root output.
+    """
+    folder = str(job_id)
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", folder):
+        raise ValueError(f"ID job tidak valid untuk folder output: {job_id!r}")
+    return layout.repo_path("CLIPS_OUTPUT_DIR", "output/clips") / folder
+
+
 def _store_render(segment_id: str, kind: str, path: Path, *, job_id: str, label: str) -> str:
-    """Pindahkan hasil ke penyimpanan kanonik; buat salinan bernama di ``output/clips``.
+    """Pindahkan hasil ke penyimpanan kanonik dan folder output per job.
 
     ``renders/<segment_id>/<kind>.mp4`` adalah yang dirujuk ``renders.r2_key``.
     Salinan untuk manusia dibuat sebagai hard link bila bisa (tanpa ruang disk
     tambahan), dan disalin bila tidak (beda drive).
     """
+    clips_dir = _job_clips_dir(job_id)
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
     key = f"renders/{segment_id}/{kind}.mp4"
     target = layout.object_path(layout.RENDERS, key)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(path), target)
 
-    clips_dir = layout.repo_path("CLIPS_OUTPUT_DIR", "output/clips")
-    clips_dir.mkdir(parents=True, exist_ok=True)
     human = clips_dir / _describe_clip(job_id=job_id, segment_id=segment_id, label=label, kind=kind)
     human.unlink(missing_ok=True)
     try:
         os.link(target, human)
     except OSError as exc:
-        # Salinan penuh memakan ruang disk dua kali; tanpa jejak di log, klip
-        # ganda di output/clips tidak bisa dijelaskan belakangan.
+        # ganda di output/clips/<job_id> tidak bisa dijelaskan belakangan.
         logger.warning(
             "Hard link %s -> %s gagal (%s); membuat salinan penuh (memakan ruang disk tambahan).",
             target,

@@ -83,7 +83,7 @@ atas:
 | Batalkan | Job sedang diproses | Menghentikan job, termasuk proses FFmpeg/yt-dlp/Whisper yang sedang berjalan. Tahap berikutnya tidak dijalankan. |
 | Proses ulang | Job gagal/dibatalkan/selesai | Mengulang dari unduhan/ingest. |
 | Analisis ulang | Job selesai atau gagal setelah transkripsi | Meminta AI memilih ulang momen memakai transkrip yang sudah ada (tanpa unduh/transkripsi ulang). |
-| Hapus | Kapan saja | Menghapus job, video sumber, dan hasil render. Salinan di `output\clips\` tetap ada. |
+| Hapus | Kapan saja | Menghapus job, video sumber, dan hasil render. Salinan bernama di `output\clips\<job_id>\` tetap ada. |
 
 Per klip: **Render ulang** (memakai mode crop dan gaya di tab Tampilan),
 **Ubah rentang** (potong awal/akhir klip), **B-roll dan efek suara**, dan
@@ -95,14 +95,20 @@ dengan bicara paling padat dan menuliskan alasannya di log. Tekan
 
 ## 5. Hasil klip
 
-Klip jadi ditulis langsung ke **`output\clips\`** dengan nama deskriptif:
+Klip jadi ditulis ke **`output\clips\<job_id>\`**, dengan satu folder untuk
+setiap job dan nama berkas deskriptif:
 
 ```
-output\clips\4d6d1fb7_ec596c52_01_mongol-bongkar-kejanggalan_final.mp4
+output\clips\4d6d1fb7-9a1a-4b61-bc25-3f272e971293\
+  4d6d1fb7_ec596c52_01_mongol-bongkar-kejanggalan_final.mp4
 ```
+
+Nama folder memakai **ID job penuh**. Nama berkas tetap memakai potongan ID
+agar ringkas saat dibaca:
 
 | Bagian | Arti |
 |---|---|
+| `4d6d1fb7-...-3f272e971293` | ID job penuh, sebagai nama folder |
 | `4d6d1fb7` | 8 karakter pertama ID job |
 | `ec596c52` | 8 karakter pertama ID segmen |
 | `01` | Urutan segmen, mengikuti waktu mulai di video |
@@ -114,7 +120,9 @@ Isi folder `output\`:
 ```
 output\
   clipper.db                    basis data (job, segmen, pengaturan AI)
-  clips\                        klip dengan nama deskriptif — aman dihapus
+  clips\                        satu subfolder per job, aman dihapus
+    <job_id>\                   ID job penuh
+      <nama-klip>.mp4
   clipper-renders\              salinan kanonik yang dirujuk basis data — JANGAN dihapus
   clipper-raw\                  video sumber (~1–2 GB per jam video)
   clipper-overlays\             aset overlay/B-roll
@@ -122,9 +130,10 @@ output\
   secrets\                      cookies YouTube terenkripsi
 ```
 
-Berkas di `clips\` adalah *hard link* ke `clipper-renders\` (satu berkas
-fisik, dua nama), jadi tidak memakan ruang dua kali. Menghapus salah satunya
-aman; menghapus `clipper-renders\` membuat halaman job kehilangan pemutarnya.
+Berkas di `clips\<job_id>\` adalah *hard link* ke berkas kanonik di
+`clipper-renders\` (satu berkas fisik), jadi tidak memakan ruang dua kali.
+Menghapus salinan bernama aman; menghapus `clipper-renders\` membuat halaman
+job kehilangan pemutarnya.
 
 **Retensi:** video sumber di `clipper-raw\` dihapus otomatis **48 jam setelah
 render terakhir job selesai** (`RAW_MEDIA_TTL_HOURS`). Setelah itu klip yang

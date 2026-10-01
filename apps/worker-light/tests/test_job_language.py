@@ -86,12 +86,17 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     return record
 
 
+def test_judul_youtube_diteruskan_ke_metadata_job(pipeline: dict[str, Any]) -> None:
+    tasks.ingest_media("job-1", "youtube", "https://www.youtube.com/watch?v=abc")
+
+    assert pipeline["source_media"]["video_title"] == "t"
+
+
 def test_job_id_dengan_subtitle_inggris_saja_memakai_whisper(pipeline: dict[str, Any]) -> None:
     tasks.ingest_media("job-1", "youtube", "https://www.youtube.com/watch?v=abc")
 
     assert pipeline["subtitle_downloads"] == 0
     assert pipeline["submitted"] == ["worker_light.tasks.transcribe_media"]
-
 
 def test_job_en_memakai_subtitle_inggris(pipeline: dict[str, Any]) -> None:
     pipeline["settings"]["language"] = "en"

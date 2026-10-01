@@ -59,6 +59,9 @@ class JobResponse(BaseModel):
     user_id: UUID
     source_type: str
     source_url: str | None
+    #: Judul video: nama berkas unggahan atau judul YouTube. ``None`` bila belum
+    #: diketahui — job YouTube baru terisi setelah ingest membaca metadata.
+    video_title: str | None
     status: str
     stage: str | None
     progress: int
@@ -198,6 +201,7 @@ def _to_response(job: Job) -> JobResponse:
         user_id=job.user_id,
         source_type=job.source_type,
         source_url=job.source_url,
+        video_title=job.video_title,
         status=job.status,
         stage=job.stage,
         progress=job.progress,
@@ -303,8 +307,8 @@ async def cancel_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession
 async def delete_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession) -> None:
     """Hapus job, semua barisnya, media mentah, dan hasil render.
 
-    Salinan bernama di ``output/clips`` sengaja TIDAK dihapus: itu folder milik
-    pengguna, dan mungkin sudah dipakai di luar aplikasi.
+    Salinan bernama di ``output/clips/<job_id>`` sengaja TIDAK dihapus: itu
+    folder milik pengguna, dan mungkin sudah dipakai di luar aplikasi.
     """
     await jobs_service.delete_job(db, current_user.id, job_id)
 

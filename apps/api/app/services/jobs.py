@@ -211,8 +211,8 @@ async def cancel_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
 async def delete_job(db: AsyncSession, user_id: Any, job_id: UUID) -> None:
     """Hapus job, semua barisnya, media mentah, dan hasil render.
 
-    Salinan bernama di ``output/clips`` sengaja TIDAK dihapus: itu folder milik
-    pengguna, dan mungkin sudah dipakai di luar aplikasi.
+    Salinan bernama di ``output/clips/<job_id>`` sengaja TIDAK dihapus: itu
+    folder milik pengguna, dan mungkin sudah dipakai di luar aplikasi.
     """
     job = await get_owned_job(db, user_id, job_id)
     media = (await db.execute(select(SourceMedia).where(SourceMedia.job_id == job.id))).scalar_one_or_none()

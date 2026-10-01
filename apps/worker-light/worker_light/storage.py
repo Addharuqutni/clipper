@@ -338,8 +338,14 @@ def record_source_media(
     codec: str,
     language: str | None,
     transcript_source: str | None,
+    video_title: str | None = None,
 ) -> None:
     """Simpan metadata media (baris dibuat saat unggahan atau di sini untuk YouTube).
+
+    ``video_title`` diisi hanya bila judul BARU diketahui worker — yaitu
+    ``YoutubeMetadata.title`` pada job YouTube; nilai ``None`` tidak menimpa
+    judul yang sudah ada, sehingga ingest ulang job unggahan tidak menghapus
+    nama berkas yang dipasang API.
 
     ``expires_at`` sengaja TIDAK diisi di sini: TECH_SPEC §3 menghapus media
     48 jam setelah **render terakhir** selesai, bukan setelah ingest. Nilainya
@@ -367,6 +373,11 @@ def record_source_media(
                 language, transcript_source, utc_now(),
             ),
         )
+        if video_title:
+            cursor.execute(
+                "UPDATE jobs SET video_title = %s, updated_at = %s WHERE id = %s",
+                (video_title, utc_now(), job_id),
+            )
 
 
 def save_transcript(

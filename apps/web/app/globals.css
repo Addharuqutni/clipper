@@ -610,6 +610,20 @@ a { color: inherit; text-underline-offset: 0.2em; text-decoration-thickness: 2px
 .table-brutal tbody tr { transition: background 100ms ease; }
 .table-brutal tbody tr:hover { background: var(--highlight); }
 
+/* Kolom Video: judul video / nama berkas sebagai teks utama. Judul panjang
+   dipotong secara VISUAL dengan elipsis, bukan dihilangkan — teks penuh
+   tetap dibaca lewat atribut `title`. max-width (bukan width) menjaga tabel
+   auto-layout tetap menyusut di layar sempit; min-width: 0 pada sel induk
+   membuat teks boleh menyusut, bukan mendorong kolom melebar. */
+.table-brutal td[data-label="Video"] { min-width: 0; }
+.cell-truncate {
+  display: block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ------------------ Aksesibilitas: reduced motion ------------------ */
 
 @media (prefers-reduced-motion: reduce) {

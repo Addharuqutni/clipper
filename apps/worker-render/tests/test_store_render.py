@@ -1,9 +1,8 @@
-"""Test penyimpanan hasil render: salinan manusia di ``output/clips``.
+"""Test penyimpanan hasil render per job.
 
-Salinan di ``output/clips`` harus hard link ke berkas kanonik (satu berkas
-fisik), dan bila hard link gagal, salinan penuh tetap dibuat TETAPI tercatat
-di log — tanpa jejak, klip ganda yang memakan ruang disk dua kali tidak bisa
-dijelaskan belakangan.
+Salinan di ``output/clips/<job_id>`` harus hard link ke berkas kanonik (satu
+berkas fisik), dan bila hard link gagal, salinan penuh tetap dibuat TETAPI
+tercatat di log.
 """
 
 from __future__ import annotations
@@ -28,23 +27,43 @@ def storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def _rendered(tmp_path: Path) -> Path:
-    source = tmp_path / "hasil.mp4"
+def _rendered(tmp_path: Path, name: str = "hasil.mp4") -> Path:
+    source = tmp_path / name
     source.write_bytes(b"video-bytes" * 100)
     return source
 
 
-def _human_copy(tmp_path: Path) -> Path:
-    (copy,) = (tmp_path / "clips").glob("*.mp4")
+def _human_copy(tmp_path: Path, job_id: str = "job-1") -> Path:
+    (copy,) = (tmp_path / "clips" / job_id).glob("*.mp4")
     return copy
 
 
 def test_salinan_klip_adalah_hard_link(storage: Path) -> None:
     from worker_render.tasks import _store_render
 
-    _store_render("seg-1", "final", _rendered(storage), job_id="job-1", label="Judul")
+    job_id = "4d6d1fb7-9a1a-4b61-bc25-3f272e971293"
+    _store_render("seg-1", "final", _rendered(storage), job_id=job_id, label="Judul")
 
-    assert os.stat(_human_copy(storage)).st_nlink == 2
+    assert os.stat(_human_copy(storage, job_id)).st_nlink == 2
+
+
+def test_setiap_job_mendapat_folder_output_sendiri(storage: Path) -> None:
+    from worker_render.tasks import _store_render
+
+    job_one = "4d6d1fb7-9a1a-4b61-bc25-3f272e971293"
+    job_two = "8c1a2e4f-6b7d-4e90-a123-456789abcdef"
+    _store_render("seg-1", "final", _rendered(storage, "hasil-1.mp4"), job_id=job_one, label="Judul")
+    _store_render("seg-2", "final", _rendered(storage, "hasil-2.mp4"), job_id=job_two, label="Judul")
+
+    assert _human_copy(storage, job_one).parent == storage / "clips" / job_one
+    assert _human_copy(storage, job_two).parent == storage / "clips" / job_two
+
+
+def test_id_job_tidak_boleh_keluar_dari_root_output(storage: Path) -> None:
+    from worker_render.tasks import _job_clips_dir
+
+    with pytest.raises(ValueError, match="ID job tidak valid"):
+        _job_clips_dir("../job-lain")
 
 
 def test_hard_link_gagal_membuat_salinan_dan_mencatat_peringatan(
@@ -57,11 +76,12 @@ def test_hard_link_gagal_membuat_salinan_dan_mencatat_peringatan(
 
     monkeypatch.setattr(tasks.os, "link", _link_gagal)
     expected = b"video-bytes" * 100
+    job_id = "4d6d1fb7-9a1a-4b61-bc25-3f272e971293"
 
     with caplog.at_level(logging.WARNING, logger=tasks.__name__):
-        tasks._store_render("seg-1", "final", _rendered(storage), job_id="job-1", label="Judul")
+        tasks._store_render("seg-1", "final", _rendered(storage), job_id=job_id, label="Judul")
 
-    copy = _human_copy(storage)
+    copy = _human_copy(storage, job_id)
     assert copy.read_bytes() == expected
     assert os.stat(copy).st_nlink == 1
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]

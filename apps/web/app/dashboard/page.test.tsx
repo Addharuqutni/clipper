@@ -21,6 +21,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     user_id: "u-1",
     source_type: "youtube",
     source_url: "https://youtu.be/abc",
+    video_title: null,
     status: "queued",
     stage: "upload",
     progress: 0,
@@ -63,6 +64,52 @@ describe("Dashboard", () => {
     expect(await screen.findByRole("cell", { name: "aaaaaaaa…" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "Job terbaru" })).toBeDefined();
     expect(screen.getByText("1 job ditampilkan")).toBeDefined();
+  });
+
+  it("menampilkan judul YouTube dan nama file upload pada setiap job", async () => {
+    const youtube = makeJob({ id: "y0000000-0000-0000-0000-000000000000", video_title: "Judul Video YouTube" });
+    const upload = makeJob({
+      id: "u0000000-0000-0000-0000-000000000000",
+      source_type: "upload",
+      source_url: null,
+      video_title: "rekaman-podcast.mp4",
+    });
+    installFetchStub({ [JOBS_PATH]: () => jsonResponse(listResponse([youtube, upload])) });
+
+    render(<Dashboard />);
+
+    expect(await screen.findByText("Judul Video YouTube")).toBeDefined();
+    expect(screen.getByText("rekaman-podcast.mp4")).toBeDefined();
+    expect(screen.getByRole("columnheader", { name: "Video" })).toBeDefined();
+  });
+
+  it("job tanpa judul menampilkan 'Menunggu metadata', bukan sel kosong", async () => {
+    installFetchStub({
+      [JOBS_PATH]: () =>
+        jsonResponse(listResponse([makeJob({ id: "n0000000-0000-0000-0000-000000000000", video_title: null })])),
+    });
+
+    render(<Dashboard />);
+
+    const row = (await screen.findByRole("cell", { name: "n0000000…" })).closest("tr");
+    if (!row) throw new Error("baris job tidak ditemukan");
+    expect(within(row).getByText("Menunggu metadata")).toBeDefined();
+  });
+
+  it("judul panjang tetap utuh di DOM dan disimpan sebagai tooltip", async () => {
+    const longTitle = "Kupas Tuntas Strategi Konten 2026: dari Ide Mentah sampai Klip Viral Setiap Hari";
+    installFetchStub({
+      [JOBS_PATH]: () =>
+        jsonResponse(listResponse([makeJob({ id: "t0000000-0000-0000-0000-000000000000", video_title: longTitle })])),
+    });
+
+    render(<Dashboard />);
+
+    // Pemotongan elipsis murni visual (CSS); teks dan tooltip tetap penuh.
+    const cell = await screen.findByTitle(longTitle);
+    expect(cell.textContent).toBe(longTitle);
+    expect(cell.getAttribute("title")).toBe(longTitle);
+    expect(cell.className).toContain("cell-truncate");
   });
 
   it("job berjalan menampilkan nama tahap, progres, dan status — bukan 'selesai tanpa hasil'", async () => {

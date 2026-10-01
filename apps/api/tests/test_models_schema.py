@@ -103,6 +103,7 @@ class TestRequiredColumns:
                     "user_id",
                     "source_type",
                     "source_url",
+                    "video_title",
                     "status",
                     "stage",
                     "progress",

@@ -32,6 +32,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     user_id: "u-1",
     source_type: "youtube",
     source_url: "https://youtu.be/abc",
+    video_title: null,
     status: "queued",
     stage: "upload",
     progress: 0,

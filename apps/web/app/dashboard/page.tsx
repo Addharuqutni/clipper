@@ -219,6 +219,7 @@ export default function Dashboard() {
               <thead>
                 <tr>
                   <th scope="col">Job</th>
+                  <th scope="col">Video</th>
                   <th scope="col">Sumber</th>
                   <th scope="col">Tahap</th>
                   <th scope="col">Progres</th>
@@ -239,6 +240,22 @@ export default function Dashboard() {
                       >
                         {String(job.id).slice(0, 8)}…
                       </Link>
+                    </td>
+                    <td data-label="Video" style={{ maxWidth: "22rem" }}>
+                      {(() => {
+                        const title = job.video_title?.trim() || null;
+                        // `title` penuh: kolom sempit memotong teks secara
+                        // visual (ellipsis), bukan menghilangkan isinya.
+                        return title ? (
+                          <span className="cell-truncate" title={title}>
+                            {title}
+                          </span>
+                        ) : (
+                          <span className="muted" style={{ fontSize: "0.8rem", fontStyle: "italic" }}>
+                            Menunggu metadata
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td data-label="Sumber">
                       {(() => {

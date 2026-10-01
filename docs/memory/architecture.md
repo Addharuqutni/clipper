@@ -67,7 +67,7 @@ Sumber: TECH_SPEC §1, §2, §4.3; T8; T9.
 | **API** | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), `sse-starlette` | Stateless; tidak pernah menyentuh FFmpeg dari event loop |
 | **Queue** | `ThreadPoolExecutor` per tahap (`clipper_shared.dispatcher`) | Pool: `ingest`, `stt`, `render`; ukuran pool = batas paralel |
 | **DB** | SQLite via `aiosqlite` (`output/clipper.db`) | Metadata, transkrip JSONB, token terenkripsi |
-| **Storage** | Disk lokal (`output/`) | Raw, render, overlay, font; klip final di `output/clips/` |
+| **Storage** | Disk lokal (`output/`) | Raw, render, overlay, font; klip final di `output/clips/<job_id>/` |
 | **STT** | `faster-whisper` (CTranslate2, int8), default `small` | Dijalankan di pool `stt`; model di-cache lokal |
 | **Diarization** | ❌ **DITUNDA** (lihat `technical-debt.md`) | `pyannote` terlalu berat di CPU. Diganti heuristik energi + gap |
 | **LLM Scoring** | Gemini 2.5 Flash (default), fallback Claude Haiku; structured JSON output | Prompt + skema Pydantic ketat; ada fallback heuristik lokal |
@@ -113,7 +113,8 @@ manual.
 ```
 users               (id, email, hashed_password, plan, created_at)   -- historis, tidak dipakai (satu pengguna lokal tanpa login)
 jobs                (id, user_id, source_type[upload|youtube], source_url,
-                     status, stage, progress, error, created_at, updated_at)
+                     video_title, status, stage, progress, error,
+                     created_at, updated_at)
 source_media        (id, job_id, r2_key, size_bytes, duration_s, codec,
                      width, height, upload_id, expires_at)
 transcripts         (id, job_id, language, words JSONB, speakers JSONB,
@@ -141,7 +142,7 @@ menambah tabel katalog: `ai_provider_settings`, `font_assets`,
 
 | Tabel | Peran | Kolom kunci |
 |---|---|---|
-| `jobs` | Satu unit pekerjaan ingest→render | `status`, `stage`, `progress`, `error` |
+| `jobs` | Satu unit pekerjaan ingest→render | `status`, `stage`, `progress`, `error`, `video_title` (nama berkas unggahan / judul YouTube) |
 | `source_media` | Media mentah di disk lokal | `r2_key`, `upload_id`, **`expires_at`** (dasar retensi 48 jam) |
 | `transcripts` | Hasil ASR | `words` JSONB (word-level), `speakers` JSONB, `model_used` |
 | `segments` | Segmen klip hasil scoring | `score`, `label`, `hook_score`, `completeness`, `emotional_arc`, `status` |
@@ -180,7 +181,7 @@ Sumber: TECH_SPEC §3.
 5. `analyze`: LLM scoring → `segments` siap direview.
 6. `render`: FFmpeg crop 9:16 + burn subtitle ASS → `renders` di `output/`.
 7. API mengirim progres via SSE (`job_events`) ke Review Studio.
-8. Export final on-demand → berkas di `output/clips/`, diunduh pengguna.
+8. Export final on-demand → berkas di `output/clips/<job_id>/`, diunduh pengguna.
    `POST /jobs` menolak dengan 422 bila penyedia AI belum siap (cek
    `resolve_provider` yang sama dengan worker).
 

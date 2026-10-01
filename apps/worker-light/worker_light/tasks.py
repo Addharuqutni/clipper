@@ -123,6 +123,9 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
         _, job_language = _load_job_settings(job_id)
         subtitle_words: list[dict[str, object]] = []
         language: str | None = job_language
+        #: Judul yang baru diketahui worker: hanya YouTube, dari metadata.
+        #: Unggahan sudah diberi judul (nama berkas) oleh API saat init.
+        video_title: str | None = None
 
         if source_type == "youtube":
             if not source_url:
@@ -130,6 +133,7 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
             emit(job_id, "running", "ingest", 5, "Membaca metadata video")
             cookies_path = storage.fetch_youtube_cookies(job_id, work_dir)
             metadata = fetch_youtube_metadata(source_url, cookies_path, job_id=job_id)
+            video_title = metadata.title or None
             validate_duration(metadata, max_minutes)
 
             # JALUR CEPAT: subtitle yang sudah ada memangkas tahap terpanjang
@@ -181,6 +185,7 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
             codec=probe["codec"],
             language=language if subtitle_words else None,
             transcript_source="youtube_subtitle" if subtitle_words else None,
+            video_title=video_title,
         )
 
         if subtitle_words:

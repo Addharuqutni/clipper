@@ -1,9 +1,10 @@
 """Test penamaan berkas klip hasil render.
 
-Hasil render ditulis ke folder yang dibaca manusia (``output/clips``), jadi
-namanya harus deskriptif — bukan ``preview.mp4`` yang tidak memberi tahu video
-asal, urutan, maupun judul. Fungsi :func:`_describe_clip` yang menyusunnya, dan
-test ini mengunci sifat-sifat yang penting untuk nama berkas:
+Hasil render ditulis ke folder job yang dibaca manusia
+(``output/clips/<job_id>``), jadi namanya harus deskriptif — bukan
+``preview.mp4`` yang tidak memberi tahu video asal, urutan, maupun judul.
+Fungsi :func:`_describe_clip` yang menyusunnya, dan test ini mengunci sifat
+penting untuk nama berkas:
 
 * aman dipakai di Windows **dan** Linux (tanpa karakter terlarang);
 * tidak pernah kosong, walau label segmen kosong atau hanya berisi simbol;

@@ -12,7 +12,14 @@ export type JobLanguage = "id" | "en" | "auto";
 
 export interface Job {
   id: string; user_id: string; source_type: SourceType;
-  source_url: string | null; status: JobStatus; stage: JobStage | null;
+  source_url: string | null;
+  /**
+   * Judul sumber untuk ditampilkan: judul video YouTube, atau nama berkas
+   * untuk unggahan. Wajib ada di respons (`JobResponse.video_title`), bernilai
+   * ``null`` selama metadata belum diambil worker.
+   */
+  video_title: string | null;
+  status: JobStatus; stage: JobStage | null;
   progress: number;
   /** Jumlah klip yang diminta pengguna (1–30, dibatasi durasi video saat analisis). */
   clip_count: number;

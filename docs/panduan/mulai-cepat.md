@@ -50,7 +50,7 @@ ini tidak muncul di PowerShell atau lewat `start.cmd`.
 1. Buka **Setelan** (`/settings`) dan isi penyedia AI. Tanpa ini, video
    ditolak saat dikirim. Lihat [Pemakaian → Penyedia AI](pemakaian.md#1-isi-penyedia-ai).
 2. Buka **YouTube** atau **Upload**, pilih jumlah klip, lalu kirim.
-3. Pantau prosesnya di **Dashboard**. Klip jadi muncul di `output\clips\`.
+3. Pantau prosesnya di **Dashboard**. Klip jadi muncul di `output\clips\<job_id>\`.
 
 ## Alamat
 
