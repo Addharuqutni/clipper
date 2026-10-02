@@ -46,10 +46,10 @@ Berikut tampilan utama website ClipperAI saat berjalan secara lokal:
 | --- | --- |
 | ![Beranda ClipperAI](docs/assets/screenshots/home.webp) | ![Dashboard ClipperAI](docs/assets/screenshots/dashboard.webp) |
 
-| Dari YouTube | Unggah video |
+| Sumber dari YouTube | Unggah video |
 | --- | --- |
-| ![Form sumber YouTube](docs/assets/screenshots/youtube.webp) | ![Form unggah video](docs/assets/screenshots/upload.webp) |
+| ![Form sumber dari YouTube](docs/assets/screenshots/youtube.webp) | ![Form unggah video](docs/assets/screenshots/upload.webp) |
 
-| Setelan AI |  |
+| Setelan AI | Hasil klip |
 | --- | --- |
-| ![Setelan AI](docs/assets/screenshots/settings.webp) |  |
+| ![Setelan AI](docs/assets/screenshots/settings.webp) | ![Halaman hasil klip dengan pratinjau 9:16](docs/assets/screenshots/clip.webp) |
