@@ -161,6 +161,23 @@ class TestDurationValidation:
         with pytest.raises(IngestError, match="Rentang live 200 menit"):
             validate_duration(self._metadata(is_live=True), max_minutes=180, live_minutes=200)
 
+    def test_live_range_within_dvr_window_accepted(self) -> None:
+        from worker_light.media_fetcher import validate_duration
+
+        # Jendela DVR 1 jam, rentang 30 menit: masih tersedia di YouTube.
+        validate_duration(self._metadata(is_live=True, duration_s=0.0, live_window_s=3600.0), max_minutes=180, live_minutes=30)
+
+    def test_live_range_longer_than_dvr_window_clamped_not_rejected(self) -> None:
+        from worker_light.media_fetcher import validate_duration
+
+        # 60 menit diminta, YouTube hanya menyimpan 15 menit terakhir: tidak ditolak,
+        # melainkan dipotong saat pengunduhan sesuai kapasitas jendela DVR.
+        validate_duration(
+            self._metadata(is_live=True, duration_s=0.0, live_window_s=900.0),
+            max_minutes=180,
+            live_minutes=60,
+        )
+
     def test_private_video_rejected(self) -> None:
         from worker_light.media_fetcher import IngestError, validate_duration
 

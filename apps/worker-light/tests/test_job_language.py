@@ -64,8 +64,16 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(media_fetcher, "fetch_youtube_metadata", lambda url, cookies, job_id: english_only)
     monkeypatch.setattr(media_fetcher, "validate_duration", lambda metadata, max_minutes, live_minutes=None: None)
 
-    def fake_download_youtube(url: str, work: Path, cookies: Path | None, job_id: str, live_minutes: int | None = None) -> Path:
+    def fake_download_youtube(
+        url: str,
+        work: Path,
+        cookies: Path | None,
+        job_id: str,
+        live_minutes: int | None = None,
+        live_window_s: float | None = None,
+    ) -> Path:
         record["download_live_minutes"] = live_minutes
+        record["download_live_window_s"] = live_window_s
         return tmp_path / "v.mp4"
 
     monkeypatch.setattr(media_fetcher, "download_youtube", fake_download_youtube)
@@ -131,6 +139,29 @@ def test_job_en_memakai_subtitle_inggris(pipeline: dict[str, Any]) -> None:
     assert pipeline["submitted"] == ["worker_light.tasks.score_segments"]
 
 
+def test_job_live_meneruskan_live_window(pipeline: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    from worker_light import media_fetcher
+    from worker_light.media_fetcher import YoutubeMetadata
+
+    live_meta = YoutubeMetadata(
+        video_id="live_id",
+        title="Live Stream",
+        duration_s=0.0,
+        is_live=True,
+        is_private=False,
+        live_window_s=1200.0,
+        language="id",
+        manual_tracks=[],
+        automatic_tracks=[],
+    )
+    monkeypatch.setattr(media_fetcher, "fetch_youtube_metadata", lambda url, cookies, job_id: live_meta)
+    pipeline["settings"]["live_minutes"] = 15
+    tasks.ingest_media("job-1", "youtube", "https://www.youtube.com/watch?v=live")
+
+    assert pipeline["download_live_minutes"] == 15
+    assert pipeline["download_live_window_s"] == 1200.0
+
+
 @pytest.mark.parametrize(("stored", "expected"), [("id", "id"), ("en", "en"), ("auto", None)])
 def test_transkripsi_memakai_bahasa_job(pipeline: dict[str, Any], stored: str, expected: str | None) -> None:
     pipeline["settings"]["language"] = stored
@@ -147,3 +178,21 @@ def test_progres_upload_sampai_analisis_tidak_pernah_turun(pipeline: dict[str, A
     progress = [value for _stage, value, _message in pipeline["emits"]]
     assert progress == sorted(progress), progress
     assert pipeline["emits"][-1][:2] == ("analyze", tasks.TRANSCRIBE_END)
+
+
+def test_ingest_timeout_handling(pipeline: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    def raise_timeout(*args: Any, **kwargs: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd=["yt-dlp"], timeout=10)
+
+    monkeypatch.setattr(media_fetcher, "download_youtube", raise_timeout)
+
+    failures: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(tasks, "emit_failed", lambda j_id, stage, msg: failures.append((j_id, stage, msg)))
+
+    res = tasks.ingest_media("job-timeout", "youtube", "https://youtube.com/watch?v=live")
+    assert res is None
+    assert len(failures) == 1
+    assert failures[0][1] == "ingest"
+    assert "Pengunduhan melebihi batas waktu" in failures[0][2]

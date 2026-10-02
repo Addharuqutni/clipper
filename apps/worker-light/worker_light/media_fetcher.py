@@ -47,6 +47,9 @@ class YoutubeMetadata:
     uploader: str = ""
     #: Bahasa ucapan video menurut yt-dlp (mis. ``id``), bila diketahui.
     language: str | None = None
+    #: Panjang jendela DVR siaran live, dalam detik (lihat
+    #: :func:`_playlist_duration_s`). ``None`` bila tidak dapat dibaca.
+    live_window_s: float | None = None
     #: Trek subtitle yang tersedia, terpisah antara manual dan otomatis.
     manual_tracks: list[SubtitleTrack] = field(default_factory=list)
     automatic_tracks: list[SubtitleTrack] = field(default_factory=list)
@@ -131,6 +134,76 @@ def _ffmpeg_dir() -> str | None:
     return str(parent) if parent != Path() and parent.is_dir() else None
 
 
+def _playlist_duration_s(manifest_url: str) -> float | None:
+    """Panjang jendela DVR sebuah siaran live, dari playlist HLS-nya.
+
+    **Mengapa perlu.** YouTube hanya menyimpan sebagian siaran, jauh lebih
+    pendek dari durasi siarannya (terukur: ~15 menit), dan ffmpeg **menunggu di
+    tepi siaran** alih-alih menolak rentang yang melewati jendela. Meminta
+    rentang yang tidak ada karena itu berarti menggantung sampai timeout proses,
+    bukan mengunduh lebih banyak. Angka ini dipakai untuk memotong rentang yang
+    diminta dan menolaknya lebih awal bila memang mustahil.
+
+    Panjang jendela = jumlah durasi ``#EXTINF`` di playlist media, karena satu
+    segmen HLS YouTube berdurasi sedetik (``#EXT-X-TARGETDURATION:1``).
+
+    Returns:
+        Panjang jendela dalam detik, atau ``None`` bila tidak dapat dibaca —
+        pemanggil harus tetap berjalan tanpa perkiraan ini.
+    """
+    import re
+    import urllib.request
+    from urllib.parse import urljoin
+
+    def _fetch(target: str) -> str | None:
+        if not _is_safe_subtitle_url(target):
+            return None
+        try:
+            req = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
+                raw: bytes = response.read()
+                return raw.decode("utf-8", errors="replace")
+        except Exception as exc:  # noqa: BLE001 — gangguan jaringan apa pun diperlakukan sama
+            logger.warning("Gagal membaca playlist live: %s", exc)
+            return None
+
+    master = _fetch(manifest_url)
+    if master is None:
+        return None
+
+    # `manifest_url` biasanya playlist varian (master); playlist media aslinya
+    # adalah URI pertama di bawah #EXT-X-STREAM-INF. Bila yang diberikan sudah
+    # playlist media, isinya langsung dipakai.
+    variants = re.findall(r"^#EXT-X-STREAM-INF:[^\n]*\n([^\n#]+)", master, re.MULTILINE)
+    media = _fetch(urljoin(manifest_url, variants[0].strip())) if variants else master
+    if media is None:
+        return None
+
+    total = sum(float(match) for match in re.findall(r"^#EXTINF:([\d.]+)", media, re.MULTILINE))
+    return total if total > 0 else None
+
+
+def _live_window_s(formats: object) -> float | None:
+    """Panjang jendela DVR dari format siaran live yang manifestnya terbaca."""
+    if not isinstance(formats, list):
+        return None
+    seen_urls: set[str] = set()
+    for fmt in formats:
+        if not isinstance(fmt, dict):
+            continue
+        # Hanya format HLS/m3u8 yang memiliki manifest playlist dengan durasi jendela DVR
+        protocol = str(fmt.get("protocol") or "")
+        manifest = fmt.get("manifest_url") or (fmt.get("url") if protocol.startswith("m3u8") else None)
+        if isinstance(manifest, str) and manifest and manifest not in seen_urls:
+            seen_urls.add(manifest)
+            window = _playlist_duration_s(manifest)
+            if window is not None:
+                return window
+            # Jika URL manifest master pertama gagal dibaca, hentikan agar tidak berulang kali timeout
+            break
+    return None
+
+
 def _ytdlp_base_args(cookies_path: Path | None) -> list[str]:
     """Argumen dasar yt-dlp, termasuk cookies bila diberikan.
 
@@ -208,6 +281,8 @@ def fetch_youtube_metadata(url: str, cookies_path: Path | None = None, *, job_id
         language=str(data.get("language") or "") or None,
         manual_tracks=manual,
         automatic_tracks=automatic,
+        # Hanya siaran live yang punya jendela DVR; VOD tidak perlu dibatasi.
+        live_window_s=_live_window_s(data.get("formats")) if data.get("is_live") else None,
     )
 
 
@@ -291,6 +366,7 @@ def download_youtube(
     *,
     job_id: str,
     live_minutes: int | None = None,
+    live_window_s: float | None = None,
 ) -> Path:
     """Unduh video YouTube ke direktori kerja.
 
@@ -299,22 +375,39 @@ def download_youtube(
     tajam daripada sumbernya setelah crop.
 
     ``live_minutes`` (siaran yang sedang live): ambil hanya N menit terakhir.
+    ``live_window_s`` (dari metadata) memotong rentang ke jendela DVR yang
+    benar-benar tersedia; tanpa itu, permintaan melewati ujung siaran dan ffmpeg
+    menunggu di tepi live sampai prosesnya dimatikan timeout.
     """
     template = str(work_dir / "source.%(ext)s")
     live_args: list[str] = []
     if live_minutes:
         seconds = live_minutes * 60
-        # Format HLS live dibaca FFmpeg; tanpa -live_start_index ia mulai dari
-        # ujung siaran dan merekam secara realtime (N menit = N menit tunggu).
-        # Indeks negatif = mundur sekian segmen dari ujung, lalu --download-sections
-        # memotong tepat N menit. ponytail: segmen HLS YouTube diasumsikan 5 detik
-        # (latensi normal); siaran low-latency (1–2 detik) mendapat rentang lebih
-        # pendek. Upgrade: baca #EXT-X-TARGETDURATION dari manifest. FFmpeg
-        # memangkas indeks ke awal jendela DVR bila siaran belum sepanjang itu.
-        live_args = [
-            "--downloader-args", f"ffmpeg_i:-live_start_index -{seconds // 5}",
-            "--download-sections", f"*0-{seconds}",
-        ]
+        if live_window_s is not None:
+            if live_window_s < seconds:
+                logger.info(
+                    "Rentang %d menit melebihi jendela DVR (%.0f detik); diambil %.0f detik terakhir.",
+                    live_minutes, live_window_s, live_window_s,
+                )
+                seconds = int(live_window_s)
+            # **Kuncinya `-live_start_index 0`.** ffmpeg mulai dari segmen paling
+            # awal yang masih tersimpan, sehingga awal rentang dapat ditentukan
+            # persis dengan `-ss`/`-t` di dalam jendela DVR — seek murni, selesai
+            # seketika (terukur: 60 detik dalam 2,6 detik). Sebelumnya indeks
+            # negatif dipakai untuk "mundur N menit", tetapi offsetnya dihitung
+            # dari AWAL jendela, bukan dari ujung siaran: rentangnya salah, dan
+            # bagian yang melewati ujung live membuat ffmpeg menunggu realtime
+            # sampai timeout 1800 detik membunuh job (terukur: 400 detik menunggu
+            # untuk rentang 15 menit). Lihat :func:`_playlist_duration_s`.
+            start_s = max(0, int(live_window_s) - seconds)
+            live_args = [
+                "--downloader-args", "ffmpeg_i:-live_start_index 0",
+                "--download-sections", f"*{start_s}-{start_s + seconds}",
+            ]
+        else:
+            # Jendela DVR tidak terbaca: ffmpeg akan mulai merekam dari tepi live
+            # ke depan secara realtime hingga durasi tercapai.
+            live_args = ["--download-sections", f"*0-{seconds}"]
     result = run_process(
         [
             # Binary TIDAK ditulis ulang di sini: `_ytdlp_base_args` sudah
@@ -434,6 +527,8 @@ def validate_duration(metadata: YoutubeMetadata, max_minutes: int, live_minutes:
                 f"Rentang live {live_minutes} menit melebihi batas {max_minutes} menit "
                 "(kapasitas konteks model AI atau MAX_VIDEO_DURATION_MIN)."
             )
+        # Jika live_window_s diketahui dan permintaan live_minutes lebih besar,
+        # rentang akan dipotong ke jendela DVR maksimum yang tersedia saat unduhan.
         return
     if metadata.duration_s <= 0:
         raise IngestError("Durasi video tidak dapat dibaca.")

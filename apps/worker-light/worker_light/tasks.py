@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import subprocess
 from typing import Any
 
 from clipper_shared.ai_provider import effective_allow_private, max_video_minutes
@@ -161,9 +162,17 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
                     ]
                     emit(job_id, "running", "ingest", 10, f"Subtitle diterima ({quality})")
 
+            live_msg = f"Mengunduh {live_minutes} menit terakhir siaran live"
+            if live_minutes and metadata.live_window_s is not None and metadata.live_window_s < live_minutes * 60:
+                avail_min = max(1, int(metadata.live_window_s // 60))
+                live_msg = f"Mengunduh {avail_min} menit siaran live (maksimum jendela DVR tersedia)"
+
             emit(job_id, "running", "ingest", 12,
-                 f"Mengunduh {live_minutes} menit terakhir siaran live" if live_minutes else "Mengunduh video")
-            downloaded = download_youtube(source_url, work_dir, cookies_path, job_id=job_id, live_minutes=live_minutes)
+                 live_msg if live_minutes else "Mengunduh video")
+            downloaded = download_youtube(
+                source_url, work_dir, cookies_path, job_id=job_id,
+                live_minutes=live_minutes, live_window_s=metadata.live_window_s,
+            )
             probe = storage.probe_media(downloaded, job_id=job_id)
             r2_key = storage.store_downloaded_media(job_id, downloaded)
         elif source_type == "upload":
@@ -211,6 +220,18 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
             submit("worker_light.tasks.transcribe_media", job_id)
         return {"job_id": job_id, "r2_key": r2_key, "skipped_whisper": bool(subtitle_words)}
     except JobCanceled:
+        return None
+    except subprocess.TimeoutExpired:
+        # Timeout bukan kesalahan pengguna maupun bug: unduhan (biasanya siaran
+        # live yang berjalan realtime) memang belum selesai dalam batas waktu.
+        # Tanpa penanganan ini, pesannya hanya dump argumen perintah yt-dlp yang
+        # tidak bisa ditindaklanjuti.
+        logger.exception("Ingest timeout untuk job %s", job_id)
+        emit_failed(
+            job_id, "ingest",
+            "Pengunduhan melebihi batas waktu. Untuk siaran live, coba pilih rentang "
+            "yang lebih pendek lalu ulangi.",
+        )
         return None
     except Exception as exc:
         logger.exception("Ingest gagal untuk job %s", job_id)
