@@ -50,6 +50,8 @@ class JobCreateRequest(BaseModel):
     clip_count: int = Field(default=5, ge=MIN_SEGMENTS, le=MAX_SEGMENTS)
     #: Bahasa ucapan video. ``auto`` = deteksi otomatis Whisper.
     language: Literal["id", "en", "auto"] = "id"
+    #: Hanya YouTube live: proses N menit terakhir siaran. ``None`` = video biasa.
+    live_minutes: int | None = Field(default=None, ge=1, le=600)
 
 
 class JobResponse(BaseModel):
@@ -68,6 +70,7 @@ class JobResponse(BaseModel):
     clip_count: int
     #: Bahasa ucapan: ``id``, ``en``, atau ``auto`` (deteksi otomatis).
     language: str
+    live_minutes: int | None
     error: str | None
     created_at: datetime
     updated_at: datetime
@@ -207,6 +210,7 @@ def _to_response(job: Job) -> JobResponse:
         progress=job.progress,
         clip_count=job.clip_count,
         language=job.language,
+        live_minutes=job.live_minutes,
         error=job.error,
         created_at=job.created_at,
         updated_at=job.updated_at,
@@ -260,6 +264,7 @@ async def create_job(payload: JobCreateRequest, current_user: CurrentUserOrDev, 
         source_url=source_url,
         clip_count=payload.clip_count,
         language=payload.language,
+        live_minutes=payload.live_minutes if payload.source_type == "youtube" else None,
     )
     return _to_response(job)
 

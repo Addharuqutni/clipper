@@ -16,13 +16,19 @@ const SYARAT = [
   "Video bersifat publik atau unlisted",
   "Durasi maksimum mengikuti konteks model AI (tertera di atas)",
   "Tautan berbentuk watch?v=, youtu.be/, atau shorts/",
+  "Siaran yang sedang live: pilih \"Sedang live\"",
 ];
+
+/** Pilihan menit terakhir siaran live; batas server 1–600. */
+const LIVE_PRESETS = [15, 30, 60, 120];
 
 export default function YoutubePage() {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [clipCount, setClipCount] = useState(5);
   const [language, setLanguage] = useState<JobLanguage>("id");
+  // null = video biasa; angka = ambil N menit terakhir siaran live.
+  const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +40,7 @@ export default function YoutubePage() {
     setError(null);
     setLoading(true); // tombol dinonaktifkan selama proses — cegah kirim ganda
     try {
-      const job = await api.submitYoutube(url.trim(), clipCount, language);
+      const job = await api.submitYoutube(url.trim(), clipCount, language, liveMinutes);
       // Halaman job menampilkan progres langsung (SSE).
       router.push(`/jobs/${job.id}`);
     } catch (e) {
@@ -74,6 +80,56 @@ export default function YoutubePage() {
             aria-describedby={error ? "yt-error" : undefined}
             style={{ marginTop: "0.5rem", marginBottom: "0.85rem" }}
           />
+
+          <div className="label">Jenis video</div>
+          <div className="clip-presets" role="group" aria-label="Jenis video" style={{ margin: "0.5rem 0 0.85rem" }}>
+            <button
+              type="button"
+              className={liveMinutes === null ? "btn btn-primary" : "btn"}
+              aria-pressed={liveMinutes === null}
+              onClick={() => setLiveMinutes(null)}
+              disabled={loading}
+            >
+              Video biasa
+            </button>
+            <button
+              type="button"
+              className={liveMinutes !== null ? "btn btn-primary" : "btn"}
+              aria-pressed={liveMinutes !== null}
+              onClick={() => setLiveMinutes((m) => m ?? 30)}
+              disabled={loading}
+            >
+              Sedang live
+            </button>
+          </div>
+
+          {liveMinutes !== null ? (
+            <>
+              <div className="label">Ambil berapa menit terakhir?</div>
+              <div
+                className="clip-presets"
+                role="group"
+                aria-label="Menit terakhir siaran"
+                style={{ marginTop: "0.5rem" }}
+              >
+                {LIVE_PRESETS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={n === liveMinutes ? "btn btn-primary" : "btn"}
+                    aria-pressed={n === liveMinutes}
+                    onClick={() => setLiveMinutes(n)}
+                    disabled={loading}
+                  >
+                    {n} menit
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ fontSize: "0.85rem", margin: "0.35rem 0 0.85rem" }}>
+                Klip dibuat dari {liveMinutes} menit terakhir siaran yang sudah lewat.
+              </p>
+            </>
+          ) : null}
 
           <LanguagePicker id="yt-lang" value={language} onChange={setLanguage} disabled={loading} />
 

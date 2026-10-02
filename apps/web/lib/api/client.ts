@@ -248,7 +248,7 @@ export const api = {
   cancelJob: (id: string) => request<Job>(`/jobs/${id}/cancel`, { method: "POST" }),
   /** Hapus job beserta media dan hasil render (salinan di output/clips/<job_id> tetap). */
   deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
-  submitYoutube: (url: string, clipCount = 5, language: JobLanguage = "id") =>
+  submitYoutube: (url: string, clipCount = 5, language: JobLanguage = "id", liveMinutes: number | null = null) =>
     request<Job>("/jobs", {
       method: "POST",
       body: JSON.stringify({
@@ -256,6 +256,7 @@ export const api = {
         source_url: url,
         clip_count: clipCount,
         language,
+        live_minutes: liveMinutes,
       }),
     }),
 

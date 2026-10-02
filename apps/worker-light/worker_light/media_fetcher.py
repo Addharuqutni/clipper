@@ -290,14 +290,31 @@ def download_youtube(
     max_height: int = 1080,
     *,
     job_id: str,
+    live_minutes: int | None = None,
 ) -> Path:
     """Unduh video YouTube ke direktori kerja.
 
     ``max_height`` membatasi resolusi: mengunduh 4K lalu memotongnya ke 1080x1920
     hanya membuang bandwidth dan waktu, karena hasil akhirnya tidak akan lebih
     tajam daripada sumbernya setelah crop.
+
+    ``live_minutes`` (siaran yang sedang live): ambil hanya N menit terakhir.
     """
     template = str(work_dir / "source.%(ext)s")
+    live_args: list[str] = []
+    if live_minutes:
+        seconds = live_minutes * 60
+        # Format HLS live dibaca FFmpeg; tanpa -live_start_index ia mulai dari
+        # ujung siaran dan merekam secara realtime (N menit = N menit tunggu).
+        # Indeks negatif = mundur sekian segmen dari ujung, lalu --download-sections
+        # memotong tepat N menit. ponytail: segmen HLS YouTube diasumsikan 5 detik
+        # (latensi normal); siaran low-latency (1–2 detik) mendapat rentang lebih
+        # pendek. Upgrade: baca #EXT-X-TARGETDURATION dari manifest. FFmpeg
+        # memangkas indeks ke awal jendela DVR bila siaran belum sepanjang itu.
+        live_args = [
+            "--downloader-args", f"ffmpeg_i:-live_start_index -{seconds // 5}",
+            "--download-sections", f"*0-{seconds}",
+        ]
     result = run_process(
         [
             # Binary TIDAK ditulis ulang di sini: `_ytdlp_base_args` sudah
@@ -307,6 +324,7 @@ def download_youtube(
             *_ytdlp_base_args(cookies_path),
             "-f", f"bv*[height<={max_height}]+ba/b[height<={max_height}]/b",
             "--merge-output-format", "mp4",
+            *live_args,
             "-o", template,
             # Jalur berkas akhir (setelah merge) dicetak ke stdout, jadi tidak
             # perlu menebak dari glob — yang bisa memilih potongan audio saja.
@@ -391,7 +409,7 @@ def select_subtitle_track(
     )
 
 
-def validate_duration(metadata: YoutubeMetadata, max_minutes: int) -> None:
+def validate_duration(metadata: YoutubeMetadata, max_minutes: int, live_minutes: int | None = None) -> None:
     """Tolak video yang tidak dapat diproses.
 
     ``max_minutes`` berasal dari ``clipper_shared.ai_provider.max_video_minutes``:
@@ -402,10 +420,21 @@ def validate_duration(metadata: YoutubeMetadata, max_minutes: int) -> None:
     Raises:
         IngestError: dengan alasan yang bisa ditampilkan langsung ke pengguna.
     """
-    if metadata.is_live:
-        raise IngestError("Video ini sedang siaran langsung dan belum dapat diproses.")
     if metadata.is_private:
         raise IngestError("Video ini bersifat privat.")
+    if metadata.is_live:
+        # Siaran live belum punya durasi; yang diproses hanya N menit terakhir.
+        if not live_minutes:
+            raise IngestError(
+                "Video ini sedang siaran langsung. Isi 'Menit terakhir siaran live' "
+                "untuk memproses bagian yang sudah lewat."
+            )
+        if live_minutes > max_minutes:
+            raise IngestError(
+                f"Rentang live {live_minutes} menit melebihi batas {max_minutes} menit "
+                "(kapasitas konteks model AI atau MAX_VIDEO_DURATION_MIN)."
+            )
+        return
     if metadata.duration_s <= 0:
         raise IngestError("Durasi video tidak dapat dibaca.")
     if metadata.duration_s > max_minutes * 60:

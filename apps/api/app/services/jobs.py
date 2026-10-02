@@ -98,6 +98,7 @@ async def create_job(
     source_url: str | None,
     clip_count: int,
     language: str = "id",
+    live_minutes: int | None = None,
 ) -> Job:
     """Buat job baru; jadwalkan ingest untuk YouTube.
 
@@ -116,6 +117,7 @@ async def create_job(
         progress=0,
         clip_count=clip_count,
         language=language,
+        live_minutes=live_minutes,
     )
     db.add(job)
     await db.commit()

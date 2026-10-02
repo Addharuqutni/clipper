@@ -47,26 +47,27 @@ ETA_MIN_AUDIO_S = 60.0
 DEFAULT_LANGUAGE = "id"
 
 
-def _load_job_settings(job_id: str) -> tuple[int, str | None]:
-    """Baca ``(clip_count, language)`` yang dipilih pengguna untuk sebuah job.
+def _load_job_settings(job_id: str) -> tuple[int, str | None, int | None]:
+    """Baca ``(clip_count, language, live_minutes)`` yang dipilih pengguna untuk sebuah job.
 
     ``language`` dikembalikan dalam bentuk yang dipakai Whisper dan pemilih
     subtitle: kode ISO (``id``/``en``), atau ``None`` untuk ``auto``.
+    ``live_minutes``: N menit terakhir yang diambil bila video sedang live.
     """
     from clipper_shared.db import get_db_connection
 
     try:
         with get_db_connection() as connection, connection.cursor() as cursor:
-            cursor.execute("SELECT clip_count, language FROM jobs WHERE id = %s", (job_id,))
+            cursor.execute("SELECT clip_count, language, live_minutes FROM jobs WHERE id = %s", (job_id,))
             row = cursor.fetchone()
     except Exception as exc:  # noqa: BLE001 — kegagalan membaca tidak boleh menghentikan tahap
         logger.warning("Gagal membaca pengaturan job %s: %s", job_id, exc)
-        return DEFAULT_CLIP_COUNT, DEFAULT_LANGUAGE
+        return DEFAULT_CLIP_COUNT, DEFAULT_LANGUAGE, None
     if not row:
-        return DEFAULT_CLIP_COUNT, DEFAULT_LANGUAGE
+        return DEFAULT_CLIP_COUNT, DEFAULT_LANGUAGE, None
     clip_count = int(row[0]) if row[0] is not None else DEFAULT_CLIP_COUNT
     stored = str(row[1] or DEFAULT_LANGUAGE)
-    return clip_count, (None if stored == "auto" else stored)
+    return clip_count, (None if stored == "auto" else stored), (int(row[2]) if row[2] else None)
 
 
 def _clock(seconds: float) -> str:
@@ -120,7 +121,7 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
     try:
         emit(job_id, "running", "ingest", 2, "Ingest dimulai")
         max_minutes = max_video_minutes(storage.load_provider_config(job_id).get("context_tokens"))
-        _, job_language = _load_job_settings(job_id)
+        _, job_language, live_minutes = _load_job_settings(job_id)
         subtitle_words: list[dict[str, object]] = []
         language: str | None = job_language
         #: Judul yang baru diketahui worker: hanya YouTube, dari metadata.
@@ -134,13 +135,18 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
             cookies_path = storage.fetch_youtube_cookies(job_id, work_dir)
             metadata = fetch_youtube_metadata(source_url, cookies_path, job_id=job_id)
             video_title = metadata.title or None
-            validate_duration(metadata, max_minutes)
+            validate_duration(metadata, max_minutes, live_minutes)
+            # Rentang hanya berlaku untuk siaran yang MASIH live; bila sudah
+            # selesai (VOD), seluruh video diproses seperti biasa.
+            live_minutes = live_minutes if metadata.is_live else None
 
             # JALUR CEPAT: subtitle yang sudah ada memangkas tahap terpanjang
             # (Whisper di CPU) dari puluhan menit menjadi hitungan detik.
             # Bahasa pilihan pengguna wajib cocok: tanpa trek berbahasa itu
             # select_subtitle_track mengembalikan None dan Whisper dipakai.
-            track = select_subtitle_track(metadata, job_language)
+            # Subtitle siaran live (bila ada) mencakup seluruh siaran, bukan
+            # potongan N menit terakhir — timestamp-nya tidak cocok; pakai Whisper.
+            track = None if live_minutes else select_subtitle_track(metadata, job_language)
             if track is None and job_language and metadata.has_subtitles:
                 emit(job_id, "running", "ingest", 8,
                      f"Tidak ada subtitle berbahasa '{job_language}' — memakai Whisper")
@@ -155,8 +161,9 @@ def ingest_media(job_id: str, source_type: str, source_url: str | None = None) -
                     ]
                     emit(job_id, "running", "ingest", 10, f"Subtitle diterima ({quality})")
 
-            emit(job_id, "running", "ingest", 12, "Mengunduh video")
-            downloaded = download_youtube(source_url, work_dir, cookies_path, job_id=job_id)
+            emit(job_id, "running", "ingest", 12,
+                 f"Mengunduh {live_minutes} menit terakhir siaran live" if live_minutes else "Mengunduh video")
+            downloaded = download_youtube(source_url, work_dir, cookies_path, job_id=job_id, live_minutes=live_minutes)
             probe = storage.probe_media(downloaded, job_id=job_id)
             r2_key = storage.store_downloaded_media(job_id, downloaded)
         elif source_type == "upload":
@@ -241,7 +248,7 @@ def transcribe_media(job_id: str) -> dict[str, Any] | None:
     work_dir = make_workspace(f"stt-{job_id[:8]}-")
     try:
         emit(job_id, "running", "transcribe", TRANSCRIBE_START, "Transkripsi mulai: mengekstrak audio")
-        _, language = _load_job_settings(job_id)
+        _, language, _ = _load_job_settings(job_id)
         media_path = storage.source_media_path(job_id)
         transcriber = _transcriber(job_id)
 

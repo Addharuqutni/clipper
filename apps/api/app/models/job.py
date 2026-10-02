@@ -73,6 +73,9 @@ class Job(Base):
     #: wajib: pembangunan ulang tabel SQLite (``_sync_sqlite_schema``) menyalin
     #: hanya kolom lama, jadi job lama mendapat nilai dari DEFAULT DDL.
     language: Mapped[str] = mapped_column(String(8), nullable=False, default="id", server_default="id")
+    #: Siaran yang sedang live: proses hanya N menit terakhir. ``NULL`` = video
+    #: biasa; diabaikan bila siaran sudah selesai saat ingest.
+    live_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: Override gaya subtitle untuk job INI (JSONB). ``NULL`` berarti memakai
     #: preset bawaan pengguna, atau bawaan modul bila preset juga tidak ada.
     #: Bentuknya bebas (ditentukan ``SubtitleStyle``) karena ia berkembang
@@ -112,6 +115,7 @@ class Job(Base):
             name="status_valid",
         ),
         CheckConstraint("language IN ('id', 'en', 'auto')", name="language_valid"),
+        CheckConstraint("live_minutes BETWEEN 1 AND 600", name="live_minutes_range"),
         # TECH_SPEC §3: indeks wajib jobs(user_id, created_at DESC) — daftar job
         # per user selalu diurutkan terbaru dulu.
         Index("ix_jobs_user_id_created_at_desc", "user_id", created_at.desc()),

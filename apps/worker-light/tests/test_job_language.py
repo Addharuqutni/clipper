@@ -28,7 +28,7 @@ from worker_light.media_fetcher import YoutubeMetadata  # noqa: E402
 def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     """Semua I/O ingest/transkripsi diganti tiruan; yang dicatat: pilihan dan urutan."""
     record: dict[str, Any] = {"emits": [], "submitted": [], "subtitle_downloads": 0}
-    settings = {"language": "id"}
+    settings: dict[str, Any] = {"language": "id", "live_minutes": None}
 
     monkeypatch.setattr(tasks, "emit", lambda job_id, status, stage, progress, message=None: record["emits"].append((stage, progress, message)))
     monkeypatch.setattr(tasks, "submit", lambda name, *args: record["submitted"].append(name))
@@ -37,7 +37,7 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(
         tasks,
         "_load_job_settings",
-        lambda job_id: (5, None if settings["language"] == "auto" else settings["language"]),
+        lambda job_id: (5, None if settings["language"] == "auto" else settings["language"], settings["live_minutes"]),
     )
 
     monkeypatch.setattr(storage, "load_provider_config", lambda job_id: {})
@@ -62,8 +62,13 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
         automatic_tracks=[],
     )
     monkeypatch.setattr(media_fetcher, "fetch_youtube_metadata", lambda url, cookies, job_id: english_only)
-    monkeypatch.setattr(media_fetcher, "validate_duration", lambda metadata, max_minutes: None)
-    monkeypatch.setattr(media_fetcher, "download_youtube", lambda url, work, cookies, job_id: tmp_path / "v.mp4")
+    monkeypatch.setattr(media_fetcher, "validate_duration", lambda metadata, max_minutes, live_minutes=None: None)
+
+    def fake_download_youtube(url: str, work: Path, cookies: Path | None, job_id: str, live_minutes: int | None = None) -> Path:
+        record["download_live_minutes"] = live_minutes
+        return tmp_path / "v.mp4"
+
+    monkeypatch.setattr(media_fetcher, "download_youtube", fake_download_youtube)
 
     def fake_download_subtitle(track: SubtitleTrack, work: Path, cookies: Path | None) -> tuple[list[Any], str]:
         record["subtitle_downloads"] += 1
@@ -83,7 +88,26 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
 
     monkeypatch.setattr(tasks, "_transcriber", lambda job_id: FakeTranscriber())
     record["settings"] = settings
+    record["metadata"] = english_only
     return record
+
+
+def test_siaran_live_mengunduh_menit_terakhir_tanpa_subtitle(pipeline: dict[str, Any]) -> None:
+    pipeline["settings"].update(language="en", live_minutes=20)
+    pipeline["metadata"].is_live = True
+    tasks.ingest_media("job-1", "youtube", "https://www.youtube.com/watch?v=abc")
+
+    assert pipeline["download_live_minutes"] == 20
+    # Subtitle siaran mencakup seluruh siaran, bukan potongan; Whisper dipakai.
+    assert pipeline["subtitle_downloads"] == 0
+    assert pipeline["submitted"] == ["worker_light.tasks.transcribe_media"]
+
+
+def test_rentang_live_diabaikan_bila_siaran_sudah_selesai(pipeline: dict[str, Any]) -> None:
+    pipeline["settings"]["live_minutes"] = 20
+    tasks.ingest_media("job-1", "youtube", "https://www.youtube.com/watch?v=abc")
+
+    assert pipeline["download_live_minutes"] is None
 
 
 def test_judul_youtube_diteruskan_ke_metadata_job(pipeline: dict[str, Any]) -> None:
@@ -97,6 +121,7 @@ def test_job_id_dengan_subtitle_inggris_saja_memakai_whisper(pipeline: dict[str,
 
     assert pipeline["subtitle_downloads"] == 0
     assert pipeline["submitted"] == ["worker_light.tasks.transcribe_media"]
+
 
 def test_job_en_memakai_subtitle_inggris(pipeline: dict[str, Any]) -> None:
     pipeline["settings"]["language"] = "en"

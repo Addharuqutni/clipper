@@ -153,6 +153,14 @@ class TestDurationValidation:
         with pytest.raises(IngestError, match="siaran langsung"):
             validate_duration(self._metadata(is_live=True), max_minutes=180)
 
+    def test_live_stream_with_range_accepted(self) -> None:
+        from worker_light.media_fetcher import IngestError, validate_duration
+
+        # Durasi siaran live tidak diketahui (0); yang dibatasi adalah rentangnya.
+        validate_duration(self._metadata(is_live=True, duration_s=0.0), max_minutes=180, live_minutes=30)
+        with pytest.raises(IngestError, match="Rentang live 200 menit"):
+            validate_duration(self._metadata(is_live=True), max_minutes=180, live_minutes=200)
+
     def test_private_video_rejected(self) -> None:
         from worker_light.media_fetcher import IngestError, validate_duration
 

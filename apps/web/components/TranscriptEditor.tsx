@@ -13,7 +13,7 @@
 // tepat setelah selesai. Status "menyimpan/menyesuaikan/tersimpan" ditampilkan
 // supaya pengguna tahu perubahan benar-benar tersimpan, bukan sekadar terlihat
 // berubah di layar.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api/client";
 import type { TranscriptWord } from "@/lib/types";
 import WordTimeline from "@/components/WordTimeline";
@@ -122,18 +122,26 @@ export default function TranscriptEditor({ jobId }: Props) {
     }
   }, [activeIndex, autoScroll]);
 
-  const startEdit = (index: number, current: string) => {
+  const startEdit = useCallback((index: number, current: string) => {
     setEditingIndex(index);
     setDraft(current);
     // Jeda video saat mengedit: memutar sambil mengetik membuat teks bergerak
     // dan kata yang diedit bisa berpindah posisi di layar.
     videoRef.current?.pause();
-  };
+  }, []);
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditingIndex(null);
     setDraft("");
-  };
+  }, []);
+
+  const seekRow = useCallback(
+    (seconds: number, index: number) => {
+      seekTo(seconds);
+      setActiveIndex(index);
+    },
+    [seekTo],
+  );
 
   /** Simpan perubahan satu kata; teks kosong berarti menghapus kata. */
   const commitEdit = async (index: number) => {
@@ -296,110 +304,26 @@ export default function TranscriptEditor({ jobId }: Props) {
           }}
         >
           {visibleWords.map(({ word, index }) => {
-            const isActive = index === activeIndex;
             const isEditing = index === editingIndex;
-            const state = saveState[wordKey(word)] ?? "idle";
             return (
-              <div
+              <WordRow
                 key={`${word.index}-${index}`}
-                ref={isActive ? activeRowRef : undefined}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  padding: "0.2rem 0.35rem",
-                  background: isActive ? "var(--accent)" : "transparent",
-                  borderBottom: "1px solid var(--muted-bg)",
-                }}
-              >
-                <button
-                  type="button"
-                  className="mono"
-                  onClick={() => {
-                    seekTo(word.start_s);
-                    setActiveIndex(index);
-                  }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--muted-ink)",
-                    fontSize: "0.75rem",
-                    minWidth: "3.2rem",
-                    textAlign: "left",
-                    padding: 0,
-                  }}
-                  title="Lompat ke kata ini"
-                >
-                  {word.start_s.toFixed(1)}s
-                </button>
-
-                {isEditing ? (
-                  <>
-                    <input
-                      className="input"
-                      autoFocus
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void commitEdit(index);
-                        if (e.key === "Escape") cancelEdit();
-                      }}
-                      style={{ flex: 1, fontSize: "0.82rem", padding: "0.2rem 0.4rem" }}
-                      aria-label={`Ubah teks kata pada ${word.start_s.toFixed(1)} detik`}
-                    />
-                    <button
-                      className="btn btn-primary"
-                      type="button"
-                      onClick={() => void commitEdit(index)}
-                      disabled={state === "saving"}
-                      style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
-                    >
-                      {state === "saving" ? "…" : "Simpan"}
-                    </button>
-                    <button
-                      className="btn"
-                      type="button"
-                      onClick={cancelEdit}
-                      style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
-                    >
-                      Batal
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(index, word.text)}
-                    style={{
-                      flex: 1,
-                      textAlign: "left",
-                      background: "none",
-                      border: "none",
-                      cursor: "text",
-                      fontSize: "0.82rem",
-                      fontWeight: isActive ? 900 : 400,
-                      padding: "0.15rem 0",
-                      color: "var(--ink)",
-                    }}
-                    title="Klik untuk mengubah teks"
-                  >
-                    {word.text}
-                  </button>
-                )}
-
-                {/* Penanda penyimpanan: pengguna harus bisa membedakan "terlihat
-                    berubah" dari "benar-benar tersimpan". */}
-                {state === "saved" ? (
-                  <span className="mono" style={{ fontSize: "0.75rem", color: "var(--ink)" }}>
-                    tersimpan
-                  </span>
-                ) : null}
-                {state === "error" ? (
-                  <span className="mono" style={{ fontSize: "0.75rem", color: "#b00020" }}>
-                    gagal
-                  </span>
-                ) : null}
-              </div>
+                word={word}
+                index={index}
+                isActive={index === activeIndex}
+                isEditing={isEditing}
+                state={saveState[wordKey(word)] ?? "idle"}
+                rowRef={index === activeIndex ? activeRowRef : undefined}
+                onSeek={seekRow}
+                onStartEdit={startEdit}
+                onCancel={cancelEdit}
+                // Hanya baris yang diedit menerima draft & commit (yang berubah
+                // tiap ketikan); baris lain mendapat props stabil sehingga memo
+                // melewatinya.
+                draft={isEditing ? draft : ""}
+                onDraft={isEditing ? setDraft : undefined}
+                onCommit={isEditing ? commitEdit : undefined}
+              />
             );
           })}
         </div>
@@ -412,3 +336,137 @@ export default function TranscriptEditor({ jobId }: Props) {
     </div>
   );
 }
+
+interface WordRowProps {
+  word: TranscriptWord;
+  index: number;
+  isActive: boolean;
+  isEditing: boolean;
+  state: SaveState;
+  rowRef?: React.Ref<HTMLDivElement>;
+  draft: string;
+  onSeek: (seconds: number, index: number) => void;
+  onStartEdit: (index: number, current: string) => void;
+  onCancel: () => void;
+  onDraft?: (value: string) => void;
+  onCommit?: (index: number) => Promise<void>;
+}
+
+/**
+ * Satu baris kata. Di-memo karena transkrip bisa berisi ribuan kata dan
+ * `onTimeUpdate` pemutar memicu render ulang editor beberapa kali per detik;
+ * tanpa memo setiap tick merender ulang seluruh daftar.
+ */
+const WordRow = memo(function WordRow({
+  word,
+  index,
+  isActive,
+  isEditing,
+  state,
+  rowRef,
+  draft,
+  onSeek,
+  onStartEdit,
+  onCancel,
+  onDraft,
+  onCommit,
+}: WordRowProps) {
+  return (
+    <div
+      ref={rowRef}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        padding: "0.2rem 0.35rem",
+        background: isActive ? "var(--accent)" : "transparent",
+        borderBottom: "1px solid var(--muted-bg)",
+      }}
+    >
+      <button
+        type="button"
+        className="mono"
+        onClick={() => onSeek(word.start_s, index)}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--muted-ink)",
+          fontSize: "0.75rem",
+          minWidth: "3.2rem",
+          textAlign: "left",
+          padding: 0,
+        }}
+        title="Lompat ke kata ini"
+      >
+        {word.start_s.toFixed(1)}s
+      </button>
+
+      {isEditing ? (
+        <>
+          <input
+            className="input"
+            autoFocus
+            value={draft}
+            onChange={(e) => onDraft?.(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void onCommit?.(index);
+              if (e.key === "Escape") onCancel();
+            }}
+            style={{ flex: 1, fontSize: "0.82rem", padding: "0.2rem 0.4rem" }}
+            aria-label={`Ubah teks kata pada ${word.start_s.toFixed(1)} detik`}
+          />
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => void onCommit?.(index)}
+            disabled={state === "saving"}
+            style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
+          >
+            {state === "saving" ? "…" : "Simpan"}
+          </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={onCancel}
+            style={{ fontSize: "0.72rem", padding: "0.2rem 0.5rem" }}
+          >
+            Batal
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onStartEdit(index, word.text)}
+          style={{
+            flex: 1,
+            textAlign: "left",
+            background: "none",
+            border: "none",
+            cursor: "text",
+            fontSize: "0.82rem",
+            fontWeight: isActive ? 900 : 400,
+            padding: "0.15rem 0",
+            color: "var(--ink)",
+          }}
+          title="Klik untuk mengubah teks"
+        >
+          {word.text}
+        </button>
+      )}
+
+      {/* Penanda penyimpanan: pengguna harus bisa membedakan "terlihat
+          berubah" dari "benar-benar tersimpan". */}
+      {state === "saved" ? (
+        <span className="mono" style={{ fontSize: "0.75rem", color: "var(--ink)" }}>
+          tersimpan
+        </span>
+      ) : null}
+      {state === "error" ? (
+        <span className="mono" style={{ fontSize: "0.75rem", color: "#b00020" }}>
+          gagal
+        </span>
+      ) : null}
+    </div>
+  );
+});

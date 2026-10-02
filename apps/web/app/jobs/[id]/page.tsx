@@ -310,6 +310,29 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
       <div className="page-head">
         <div>
           <h1>Hasil klip</h1>
+          {job ? (
+            <p style={{ margin: "0.35rem 0 0", fontWeight: 700, overflowWrap: "anywhere" }}>
+              {/* source_url YouTube selalu kanonik dari server (https://www.youtube.com/watch?v=…). */}
+              {job.video_title?.trim() ? (
+                job.source_type === "youtube" && job.source_url ? (
+                  <a href={job.source_url} target="_blank" rel="noopener noreferrer" title="Buka di YouTube">
+                    {job.video_title}
+                  </a>
+                ) : (
+                  job.video_title
+                )
+              ) : (
+                <span className="muted" style={{ fontWeight: 400, fontStyle: "italic" }}>
+                  Menunggu metadata
+                </span>
+              )}
+              {job.live_minutes ? (
+                <span className="mono muted" style={{ fontSize: "0.8rem", fontWeight: 400, marginLeft: "0.5rem" }}>
+                  · live, {job.live_minutes} menit terakhir
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.4rem" }}>
             <span className="mono muted" style={{ fontSize: "0.8rem" }} title={jobId}>
               {jobId ? jobId.slice(0, 8) : "…"}
