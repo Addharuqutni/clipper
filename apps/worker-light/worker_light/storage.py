@@ -129,23 +129,8 @@ def extract_audio_chunks(
 
 def load_transcript(job_id: str) -> dict[str, Any] | None:
     """Ambil transkrip job beserta daftar katanya."""
-    with get_db_connection() as connection, connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT language, words, full_text, model_used FROM transcripts "
-            "WHERE job_id = %s ORDER BY created_at DESC LIMIT 1",
-            (job_id,),
-        )
-        row = cursor.fetchone()
-    if row is None:
-        return None
-
-    words = row[1] or []
-    if isinstance(words, str):
-        try:
-            words = json.loads(words)
-        except json.JSONDecodeError:
-            words = []
-    return {"language": row[0], "words": words, "full_text": row[2] or "", "model_used": row[3] or ""}
+    from clipper_shared import transcript as transcript_mod
+    return transcript_mod.load_transcript(job_id)
 
 
 def load_provider_config(job_id: str) -> ProviderConfig:
@@ -351,15 +336,14 @@ def save_transcript(
     model_used: str,
 ) -> None:
     """Simpan transkrip (kata bertimestamp) untuk sebuah job."""
-    with get_db_connection() as connection, connection.cursor() as cursor:
-        cursor.execute("DELETE FROM transcripts WHERE job_id = %s", (job_id,))
-        cursor.execute(
-            """
-            INSERT INTO transcripts (id, job_id, language, words, full_text, model_used, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (str(uuid.uuid4()), job_id, language, json.dumps(words), full_text, model_used, utc_now()),
-        )
+    from clipper_shared import transcript as transcript_mod
+    transcript_mod.save_transcript(
+        job_id=job_id,
+        language=language,
+        words=words,
+        full_text=full_text,
+        model_used=model_used,
+    )
 
 
 def save_segments(*, job_id: str, words: list[dict[str, object]]) -> None:
