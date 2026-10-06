@@ -310,10 +310,10 @@ async def cancel_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Hapus job beserta berkasnya")
 async def delete_job(job_id: UUID, current_user: CurrentUserOrDev, db: DbSession) -> None:
-    """Hapus job, semua barisnya, media mentah, dan hasil render.
+    """Hapus job, semua barisnya, dan folder job beserta seluruh isinya.
 
-    Salinan bernama di ``output/clips/<job_id>`` sengaja TIDAK dihapus: itu
-    folder milik pengguna, dan mungkin sudah dipakai di luar aplikasi.
+    Folder ``output/<judul>-<id>`` memang milik job ini; tidak ada berkas job
+    di luarnya. Klip yang sudah disalin keluar folder itu tidak tersentuh.
     """
     await jobs_service.delete_job(db, current_user.id, job_id)
 

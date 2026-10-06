@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -29,45 +28,6 @@ logger = logging.getLogger(__name__)
 
 #: AAD cookies YouTube. HARUS sama dengan ``app.api.v1.youtube.COOKIES_AAD``.
 COOKIES_AAD = b"clipper.source_media.youtube_cookies"
-
-
-def source_media_r2_key(job_id: str) -> str:
-    """Object key media sumber job.
-
-    Raises:
-        RuntimeError: job belum punya media (unggahan belum selesai).
-    """
-    with get_db_connection() as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT r2_key FROM source_media WHERE job_id = %s", (job_id,))
-        row = cursor.fetchone()
-    if row is None or not row[0]:
-        raise RuntimeError(f"Tidak ada media untuk job {job_id}")
-    return str(row[0])
-
-
-def source_media_path(job_id: str) -> Path:
-    """Jalur media sumber job di penyimpanan. Dibaca di tempat, tanpa salinan.
-
-    Raises:
-        RuntimeError: job belum punya media (unggahan belum selesai).
-        FileNotFoundError: baris ada tetapi berkasnya hilang dari disk.
-    """
-    path = layout.object_path(layout.RAW, source_media_r2_key(job_id))
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Media sumber tidak ada di disk ({path}). Berkas mungkin sudah "
-            "dihapus oleh pembersihan otomatis; buat job baru."
-        )
-    return path
-
-
-def store_downloaded_media(job_id: str, path: Path) -> str:
-    """Pindahkan hasil unduhan ke penyimpanan dan kembalikan object key-nya."""
-    key = f"raw/{job_id}/{path.name}"
-    target = layout.object_path(layout.RAW, key)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(path), target)
-    return key
 
 
 def fetch_youtube_cookies(job_id: str, work_dir: Path) -> Path | None:
@@ -346,6 +306,8 @@ def record_source_media(
     ``YoutubeMetadata.title`` pada job YouTube; nilai ``None`` tidak menimpa
     judul yang sudah ada, sehingga ingest ulang job unggahan tidak menghapus
     nama berkas yang dipasang API.
+    Judul yang berubah belakangan tidak memindahkan folder job: namanya
+    sudah terekam di ``r2_key``.
 
     ``expires_at`` sengaja TIDAK diisi di sini: TECH_SPEC §3 menghapus media
     48 jam setelah **render terakhir** selesai, bukan setelah ingest. Nilainya

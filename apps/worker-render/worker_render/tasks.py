@@ -10,15 +10,16 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import shutil
 import uuid
-from dataclasses import dataclass, fields
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
+from clipper_shared import job_media
 from clipper_shared import storage as layout
 from clipper_shared.db import get_db_connection, utc_now
+from clipper_shared.job_state import DONE, RENDER, RUNNING, progress, render_summary
 from clipper_shared.reframe import CropMode
 from clipper_shared.subtitles import SubtitleStyle, SubtitleWord
 from clipper_shared.worker_events import JobCanceled, emit
@@ -62,22 +63,6 @@ def _limit_opencv_threads() -> None:
 
 
 # --- Akses data -------------------------------------------------------------
-
-
-def _source_path(job_id: str) -> Path:
-    """Jalur media sumber job. Dibaca di tempat: tidak ada salinan per klip."""
-    with get_db_connection() as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT r2_key FROM source_media WHERE job_id = %s", (job_id,))
-        row = cursor.fetchone()
-    if row is None or not row[0]:
-        raise RuntimeError(f"source_media untuk job {job_id} tidak ditemukan")
-    path = layout.object_path(layout.RAW, row[0])
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Media sumber tidak ada di disk ({path}); mungkin sudah dihapus "
-            "pembersihan otomatis 48 jam setelah render terakhir."
-        )
-    return path
 
 
 def _fetch_segment_range(segment_id: str) -> dict[str, Any]:
@@ -226,56 +211,27 @@ def _load_segment_overlays(segment_id: str) -> list[Any]:
 
 
 def _describe_clip(*, job_id: str, segment_id: str, label: str, kind: str, order: int = 1) -> str:
-    """Nama berkas deskriptif untuk salinan di folder output job::
+    """Nama berkas klip di folder job::
 
         <job>_<segmen>_<urutan>_<slug-label>_<jenis>.mp4
+
+    Nama memuat ID job dan segmen supaya berkas dapat ditelusuri balik ke baris
+    basis data, dan ``order`` untuk render berulang pada segmen yang sama.
     """
-    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:40].rstrip("-")
+    slug = layout.slugify(label, limit=40)
     return f"{str(job_id)[:8]}_{str(segment_id)[:8]}_{order:02d}_{slug or 'segmen'}_{kind}.mp4"
 
-
-def _job_clips_dir(job_id: str) -> Path:
-    """Direktori klip yang terlihat pengguna untuk satu job.
-
-    ID job berasal dari UUID API dan dipertahankan utuh sebagai satu komponen
-    path. Validasi ini mencegah nilai task yang rusak keluar dari root output.
-    """
-    folder = str(job_id)
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", folder):
-        raise ValueError(f"ID job tidak valid untuk folder output: {job_id!r}")
-    return layout.repo_path("CLIPS_OUTPUT_DIR", "output/clips") / folder
-
-
 def _store_render(segment_id: str, kind: str, path: Path, *, job_id: str, label: str) -> str:
-    """Pindahkan hasil ke penyimpanan kanonik dan folder output per job.
+    """Pindahkan hasil render ke folder job dan kembalikan object key-nya.
 
-    ``renders/<segment_id>/<kind>.mp4`` adalah yang dirujuk ``renders.r2_key``.
-    Salinan untuk manusia dibuat sebagai hard link bila bisa (tanpa ruang disk
-    tambahan), dan disalin bila tidak (beda drive).
+    Satu job satu folder: klip duduk bersebelahan dengan video sumbernya, dan
+    ``renders.r2_key`` menunjuk berkas itu juga — tidak ada salinan kedua.
     """
-    clips_dir = _job_clips_dir(job_id)
-    clips_dir.mkdir(parents=True, exist_ok=True)
-
-    key = f"renders/{segment_id}/{kind}.mp4"
-    target = layout.object_path(layout.RENDERS, key)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(path), target)
-
-    human = clips_dir / _describe_clip(job_id=job_id, segment_id=segment_id, label=label, kind=kind)
-    human.unlink(missing_ok=True)
-    try:
-        os.link(target, human)
-    except OSError as exc:
-        # ganda di output/clips/<job_id> tidak bisa dijelaskan belakangan.
-        logger.warning(
-            "Hard link %s -> %s gagal (%s); membuat salinan penuh (memakan ruang disk tambahan).",
-            target,
-            human,
-            exc,
-        )
-        shutil.copy2(target, human)
-    return key
-
+    return job_media.store(
+        job_id,
+        _describe_clip(job_id=job_id, segment_id=segment_id, label=label, kind=kind),
+        path,
+    )
 
 def _set_render(segment_id: str, kind: str, **values: Any) -> None:
     """Perbarui render aktif (queued/running) terbaru untuk segmen+kind, atau buat baru."""
@@ -307,7 +263,8 @@ def _finish_job_status(job_id: str) -> None:
 
     Sebelumnya status mengikuti render yang kebetulan selesai terakhir: satu klip
     gagal di akhir membuat 9 klip bagus tampil sebagai job gagal, dan kegagalan
-    di awal tertutup oleh sukses berikutnya.
+    di awal tertutup oleh sukses berikutnya. Keputusan nasib job itu sendiri ada
+    di :meth:`clipper_shared.job_state.RenderSummary.final_outcome`.
     """
     with get_db_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -321,61 +278,21 @@ def _finish_job_status(job_id: str) -> None:
         )
         latest = dict(cursor.fetchall())  # baris terurut waktu: yang terakhir menang
 
-    summary = _render_summary(list(latest.values()))
+    summary = render_summary(list(latest.values()))
     if summary.pending:
-        emit(job_id, "running", "render", 75 + int(25 * summary.finished / max(summary.total, 1)) - 1,
+        emit(job_id, RUNNING, RENDER, progress(RENDER, summary.fraction),
              f"{summary.finished}/{summary.total} klip selesai dirender")
         return
 
-    # Render terakhir selesai: hitung mundur 48 jam retensi media mentah dari sini.
+    # Render terakhir selesai: hitung mundur 48 jam retensi media mentah dari sini
+    # (keputusan T6 — retensi bergantung kejadian, bukan umur berkas).
     from clipper_shared.maintenance import raw_media_expiry
 
     with get_db_connection() as connection, connection.cursor() as cursor:
         cursor.execute("UPDATE source_media SET expires_at = %s WHERE job_id = %s", (raw_media_expiry(), job_id))
 
     status, message = summary.final_outcome()
-    emit(job_id, status, "done" if status == "done" else "render", 100 if status == "done" else 0, message)
-
-
-@dataclass(frozen=True, slots=True)
-class _RenderSummary:
-    """Ringkasan render terbaru per segmen, tanpa render yang dibatalkan.
-
-    Render ``canceled`` dihentikan pengguna: bukan hasil, bukan kegagalan. Ia
-    dikeluarkan dari ``total`` juga — kalau tidak, segmen yang dibatalkan
-    ikut menjadi penyebut dan pesan akhir berbunyi "0 render gagal".
-    """
-
-    pending: int
-    done: int
-    failed: int
-
-    @property
-    def finished(self) -> int:
-        return self.done + self.failed
-
-    @property
-    def total(self) -> int:
-        return self.pending + self.finished
-
-    def final_outcome(self) -> tuple[str, str]:
-        """Status dan pesan job setelah tidak ada render yang tertunda."""
-        if self.done and self.failed:
-            return "done", f"{self.done} klip selesai, {self.failed} gagal (bisa dirender ulang)."
-        if self.done:
-            return "done", f"{self.done} klip selesai."
-        if self.failed:
-            return "failed", f"Semua {self.failed} render gagal. Lihat log untuk detail."
-        return "done", "Tidak ada klip yang dirender (semua render dibatalkan)."
-
-
-def _render_summary(statuses: list[str]) -> _RenderSummary:
-    return _RenderSummary(
-        pending=sum(s in {"queued", "running"} for s in statuses),
-        done=statuses.count("done"),
-        failed=statuses.count("failed"),
-    )
-
+    emit(job_id, status, DONE if status == DONE else RENDER, progress(DONE) if status == DONE else 0, message)
 
 # --- Task -------------------------------------------------------------------
 
@@ -411,10 +328,11 @@ def render_clip(
     try:
         _limit_opencv_threads()
         _set_render(segment_id, kind, status="running", crop_mode=mode.value)
-        emit(job_id, "running", "render", 80, f"Render {kind} dimulai (threads={_ffmpeg_threads()})")
+        emit(job_id, RUNNING, RENDER, progress(RENDER, 0.1),
+             f"Render {kind} dimulai (threads={_ffmpeg_threads()})")
 
         settings = _render_settings()
-        source_path = _source_path(job_id)
+        source_path = job_media.source_path(job_id)
         segment = _fetch_segment_range(segment_id)
         is_preview = kind == "preview"
         options = ReframeOptions(
@@ -434,7 +352,7 @@ def render_clip(
         style = _style_from_payload(style_payload)
         subtitles = write_subtitles(words, work_dir, options=options, style=style) if words else None
 
-        emit(job_id, "running", "render", 82, f"Mode {mode.value}: merender segmen")
+        emit(job_id, RUNNING, RENDER, progress(RENDER, 0.15), f"Mode {mode.value}: merender segmen")
         rendered = work_dir / "rendered.mp4"
         result = render_segment(
             source_path, rendered, options,
@@ -447,7 +365,8 @@ def render_clip(
         if overlay_specs:
             from worker_render.overlay_compositor import composite_overlays
 
-            emit(job_id, "running", "render", 95, f"Mengomposisikan {len(overlay_specs)} overlay")
+            emit(job_id, RUNNING, RENDER, progress(RENDER, 0.75),
+                 f"Mengomposisikan {len(overlay_specs)} overlay")
             composited = work_dir / "composited.mp4"
             try:
                 composite_overlays(
@@ -488,7 +407,7 @@ def render_clip(
         logger.exception("Render %s untuk job %s segmen %s gagal", kind, job_id, segment_id)
         try:
             _set_render(segment_id, kind, status="failed")
-            emit(job_id, "running", "render", 80, f"Render segmen gagal: {exc}")
+            emit(job_id, RUNNING, RENDER, progress(RENDER, 0.1), f"Render segmen gagal: {exc}")
             _finish_job_status(job_id)
         except JobCanceled:
             pass

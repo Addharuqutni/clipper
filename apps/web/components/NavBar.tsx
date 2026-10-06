@@ -4,6 +4,7 @@
 // aktif (usePathname) — sekaligus menjaga layout root tetap Server Component.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Logo } from "@/components/Logo";
 
 /** Ditampilkan sebagai penanda identitas. Tidak ada sesi yang dikelola. */
 const LOCAL_IDENTITY_EMAIL = "local@clipper.ai";
@@ -40,21 +41,10 @@ export function NavBar() {
             fontFamily: "var(--font-display)",
           }}
         >
-          {/* Logo blok: teks di dalam kotak hitam. Bukan emoji, bukan raster. */}
-          <span
-            aria-hidden="true"
-            style={{
-              background: "var(--ink)",
-              color: "var(--accent)",
-              border: "var(--bw) solid var(--ink)",
-              padding: "0.15rem 0.45rem",
-              fontWeight: 900,
-              fontSize: "1.05rem",
-              letterSpacing: "0.02em",
-              textTransform: "uppercase",
-            }}
-          >
-            CLIP
+          {/* Simbol "Cut Frame": bingkai 9:16 dengan sudut dipotong 45 derajat.
+              Vektor inline, bukan raster — sama seperti sisa UI brutalism. */}
+          <span aria-hidden="true" style={{ display: "flex", color: "var(--ink)" }}>
+            <Logo size={24} />
           </span>
           <span style={{ fontWeight: 900, fontSize: "1.05rem", textTransform: "uppercase" }}>
             ClipperAI

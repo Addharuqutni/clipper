@@ -96,7 +96,7 @@ Untuk mempermudah penggunaan di workstation Windows tanpa perlu menyalakan Docke
                ▼                          ▼
 ┌──────────────────────────────┐   ┌─────────────────────┐
 │  SQLite + aiosqlite          │   │  Local Storage      │
-│  output/clipper.db           │   │  output/clips/<job_id>/      │
+│  output/clipper.db           │   │  output/<judul>-<id>/        │
 │  (JSONB & UUID compatibility)│   │  output/raw/ ...             │
 └──────────────────────────────┘   └─────────────────────┘
 ```
@@ -104,7 +104,7 @@ Untuk mempermudah penggunaan di workstation Windows tanpa perlu menyalakan Docke
 - **Database:** SQLite tersemat otomatis via `aiosqlite` di `output/clipper.db`. Disediakan proxy custom sqlite3 dan compiler extensions `@compiles(JSONB, "sqlite")` & `@compiles(PGUUID, "sqlite")` agar skema SQLAlchemy PostgreSQL dapat berjalan tanpa migrasi terpisah.
 - **Task Runner:** `ThreadPoolExecutor` internal yang mengalirkan task asinkron (`ingest` -> `transcribe` -> `analyze` -> `render`) secara bertahap tanpa Celery atau Redis broker.
 - **Event Bus:** `LocalEventBus` in-memory yang menyalurkan pembaruan tahapan secara real-time via SSE langsung ke frontend browser.
-- **Storage:** Seluruh asset tersimpan di disk lokal (`output/`), dengan klip hasil otomatis ditaruh di `output/clips/<job_id>/`.
+- **Storage:** Seluruh asset tersimpan di disk lokal (`output/`), dengan video sumber dan klip hasil sebuah job ditaruh bersama di `output/<judul>-<id>/`.
 
 ---
 
@@ -143,7 +143,7 @@ Cek cepat sebelum mulai: `ffmpeg -version | grep -E 'libx264|libass'` (atau Powe
 | **API** | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Alembic, `sse-starlette` | Stateless; tidak pernah menyentuh FFmpeg |
 | **Queue** | In-Process ThreadPool per tahap (Standalone) — ~~Celery 5 + Redis 7~~ (superseded T9) | Tahap: `ingest`, `transcribe`, `analyze`, `render`; ukuran pool = batas paralel |
 | **DB** | SQLite via `aiosqlite` (Standalone) — ~~PostgreSQL 16 + pgvector~~ (superseded T9) | Metadata, transkrip JSONB, token terenkripsi |
-| **Storage** | Local filesystem (`output/`) — ~~Cloudflare R2~~ (superseded T9) | Raw, render, overlay, font; klip final di `output/clips/<job_id>/` |
+| **Storage** | Local filesystem (`output/`) — ~~Cloudflare R2~~ (superseded T9) | Raw, render, overlay, font; video sumber + klip final di `output/<judul>-<id>/` |
 | **STT** | `faster-whisper` (CTranslate2, int8), default `small` | Dijalankan di `worker-light`; model di-cache di volume persisten |
 | **Diarization** | ❌ **DITUNDA** (lihat §5.3) | `pyannote` terlalu berat di CPU. Diganti heuristik energi + gap |
 | **LLM Scoring** | Gemini 2.5 Flash (default), fallback Claude Haiku; structured JSON output | Prompt + skema Pydantic ketat; **parsing toleran-kerusakan, temperature berbasis niat, pertahanan prompt injection, dan permintaan berlebih `num_clips + 3`** — lihat §5.4 |
@@ -453,7 +453,7 @@ Estimasi hari bersifat indikatif untuk satu developer penuh waktu.
 33. Editor transkrip: perbaiki kesalahan fonetik → regenerate subtitle tanpa render ulang video penuh.
 34. Resolver preset subtitle + preview. **Keputusan:** debounce re-render di server (bukan libass WASM di browser) untuk MVP — lebih sedikit kode, konsisten dengan hasil final. Render preview tetap 540p/veryfast agar terasa responsif.
 35. Generator caption + hashtag berbasis AI untuk disalin saat unggah manual (PRD FR-4.2).
-36. Export manual: full render on-demand → berkas di `output/clips/<job_id>/` (sejak T9; ~~presigned download URL R2~~); watermark opsional untuk free tier.
+36. Export manual: full render on-demand → berkas di `output/<judul>-<id>/` (sejak T9; ~~presigned download URL R2~~); watermark opsional untuk free tier.
 37. Status & riwayat job, penanganan error yang bisa dibaca pengguna.
 
 **DoD:** pengguna dapat mengubah transkrip, melihat preview terbarui, dan mengunduh MP4 1080×1920 dengan bitrate optimal (PRD FR-4.3).

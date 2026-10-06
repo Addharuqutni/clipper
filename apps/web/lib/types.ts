@@ -26,7 +26,7 @@ export interface Job {
   /** Bahasa ucapan yang dipilih; `auto` = deteksi otomatis. */
   language: JobLanguage;
   /** YouTube live: N menit terakhir yang diproses; `null` = video biasa. */
-  live_minutes?: number | null;
+  live_minutes: number | null;
   error: string | null;
   created_at: string; updated_at: string;
 }

@@ -113,7 +113,9 @@ def test_unggahan_resume_lalu_complete_memulai_ingest(client: TestClient, submit
     with get_db_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT r2_key FROM source_media WHERE job_id = %s", (job_id,))
         (key,) = cur.fetchone()
-    assert layout.object_path(layout.RAW, key).read_bytes() == data
+    # Satu job satu folder: videonya ada di folder job, bukan bucket terpisah.
+    assert key == f"video-{job_id[:8]}/video.mp4"
+    assert layout.key_path(key).read_bytes() == data
 
 
 def test_unggahan_mengisi_judul_dari_nama_berkas_dan_resume_mempertahankannya(client: TestClient) -> None:

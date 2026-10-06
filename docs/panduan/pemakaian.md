@@ -120,24 +120,23 @@ Isi folder `output\`:
 ```
 output\
   clipper.db                    basis data (job, segmen, pengaturan AI)
-  clips\                        satu subfolder per job, aman dihapus
-    <job_id>\                   ID job penuh
-      <nama-klip>.mp4
-  clipper-renders\              salinan kanonik yang dirujuk basis data — JANGAN dihapus
-  clipper-raw\                  video sumber (~1–2 GB per jam video)
+  <judul>-<id>\                 satu folder per job
+    source.mp4                  video sumber (~1–2 GB per jam video)
+    <job>_<segmen>_<urut>_<label>_final.mp4
   clipper-overlays\             aset overlay/B-roll
   clipper-fonts\                font kustom
   secrets\                      cookies YouTube terenkripsi
+  uploads\                      potongan unggahan yang belum selesai
 ```
 
-Berkas di `clips\<job_id>\` adalah *hard link* ke berkas kanonik di
-`clipper-renders\` (satu berkas fisik), jadi tidak memakan ruang dua kali.
-Menghapus salinan bernama aman; menghapus `clipper-renders\` membuat halaman
-job kehilangan pemutarnya.
+Nama folder job diambil dari judul video, ditambah 8 huruf pertama ID job
+supaya tetap unik dan dapat ditelusuri balik ke dashboard. Video sumber dan
+semua klipnya berada di folder yang sama — tidak ada salinan kedua, jadi
+menghapus sebuah klip berarti menghapusnya juga dari halaman job.
 
-**Retensi:** video sumber di `clipper-raw\` dihapus otomatis **48 jam setelah
-render terakhir job selesai** (`RAW_MEDIA_TTL_HOURS`). Setelah itu klip yang
-sudah jadi tetap ada, tetapi render ulang butuh job baru.
+**Retensi:** video sumber (`source.mp4`) dihapus otomatis **48 jam setelah
+render terakhir job selesai** (`RAW_MEDIA_TTL_HOURS`). Klipnya tetap ada dan
+folder job tidak dihapus; render ulang setelah itu butuh job baru.
 
 ## 6. Mengosongkan data
 
@@ -146,8 +145,13 @@ ikut terhapus**, jadi isi ulang di `/settings`.
 
 ```cmd
 stop.cmd
-del output\clipper.db
-rmdir /s /q output\clipper-raw output\clipper-renders output\clipper-overlays output\clips output\uploads .work
+rmdir /s /q output
+rmdir /s /q .work
 ```
+
+**Perintah di atas menghapus seluruh folder `output`**, termasuk video sumber,
+klip, dan cookies YouTube terenkripsi di `output\secrets`. Bila hanya ingin
+membuang hasil render, hapus folder job satu per satu dari Explorer dan
+biarkan `output\clipper.db` — dashboard akan menandai klipnya hilang.
 
 Basis data baru dibuat otomatis saat aplikasi dinyalakan lagi.

@@ -15,6 +15,19 @@ from typing import Any
 from uuid import UUID
 
 from clipper_shared import storage as layout
+from clipper_shared.job_state import (
+    ACTIVE_STATUSES,
+    ANALYZE,
+    CANCELED,
+    FAILED,
+    INGEST,
+    QUEUED,
+    RENDER,
+    RUNNING,
+    UPLOAD,
+    is_active,
+    progress,
+)
 from clipper_shared.reframe import CropMode
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +39,6 @@ from app.models.segment import Segment
 from app.models.source_media import SourceMedia
 from app.services.ai_settings import ai_config_problem
 from app.services.errors import ConflictError, NotFoundError, UnprocessableError
-
-#: Status yang berarti job sedang atau akan diproses — tidak boleh dikirim ulang.
-ACTIVE_STATUSES = frozenset({"queued", "running"})
-
 
 # --- Kepemilikan & pemeriksaan bersama --------------------------------------
 
@@ -63,11 +72,11 @@ async def get_segment(db: AsyncSession, job: Job, segment_id: UUID) -> Segment:
     return segment
 
 
-def file_or_404(bucket: str, key: str | None, missing: str) -> Path:
+def file_or_404(key: str | None, missing: str) -> Path:
     """Jalur berkas di penyimpanan, atau 404 bila belum/tidak ada."""
     if not key:
         raise NotFoundError(missing)
-    path = layout.object_path(bucket, key)
+    path = layout.key_path(key)
     if not path.is_file():
         raise NotFoundError(missing)
     return path
@@ -112,8 +121,8 @@ async def create_job(
         user_id=user_id,
         source_type=source_type,
         source_url=source_url,
-        status="queued",
-        stage="ingest" if source_type == "youtube" else "upload",
+        status=QUEUED,
+        stage=INGEST if source_type == "youtube" else UPLOAD,
         progress=0,
         clip_count=clip_count,
         language=language,
@@ -140,19 +149,19 @@ async def dispatch_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
     from app.core.dispatch import dispatch_ingest
 
     job = await get_owned_job(db, user_id, job_id)
-    if job.status in ACTIVE_STATUSES and job.stage != "upload":
+    if is_active(job.status) and job.stage != UPLOAD:
         raise ConflictError(
             f"Job sedang diproses (status '{job.status}'). Batalkan dulu bila ingin mengulang."
         )
     if job.source_type == "upload":
         media = (await db.execute(select(SourceMedia).where(SourceMedia.job_id == job.id))).scalar_one_or_none()
-        if media is None or not layout.object_path(layout.RAW, media.r2_key).is_file():
+        if media is None or not layout.key_path(media.r2_key).is_file():
             raise ConflictError(
                 "Berkas unggahan tidak ada (belum selesai diunggah atau sudah dihapus). Buat job baru."
             )
 
     await require_ai_ready(db, user_id)
-    job.status, job.stage, job.progress, job.error = "queued", "ingest", 0, None
+    job.status, job.stage, job.progress, job.error = QUEUED, INGEST, 0, None
     await db.commit()
     await db.refresh(job)
     dispatch_ingest(str(job.id), job.source_type, job.source_url)
@@ -169,14 +178,14 @@ async def rescore_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
     from app.models.transcript import Transcript
 
     job = await get_owned_job(db, user_id, job_id)
-    if job.status in ACTIVE_STATUSES:
+    if is_active(job.status):
         raise ConflictError("Job masih diproses.")
     has_transcript = (await db.execute(select(Transcript.id).where(Transcript.job_id == job.id))).first()
     if not has_transcript:
         raise ConflictError("Job belum punya transkrip untuk dianalisis.")
 
     await require_ai_ready(db, user_id)
-    job.status, job.stage, job.progress, job.error = "queued", "analyze", 60, None
+    job.status, job.stage, job.progress, job.error = QUEUED, ANALYZE, progress(ANALYZE, 0.0), None
     await db.commit()
     await db.refresh(job)
     dispatch_rescore(str(job.id))
@@ -194,13 +203,13 @@ async def cancel_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
     from clipper_shared.processes import terminate_job
 
     job = await get_owned_job(db, user_id, job_id)
-    if job.status in ACTIVE_STATUSES:
-        job.status, job.error = "canceled", "Dibatalkan pengguna."
+    if is_active(job.status):
+        job.status, job.error = CANCELED, "Dibatalkan pengguna."
         segment_ids = select(Segment.id).where(Segment.job_id == job.id)
         await db.execute(
             update(Render)
-            .where(Render.segment_id.in_(segment_ids), Render.status.in_(["queued", "running"]))
-            .values(status="canceled")
+            .where(Render.segment_id.in_(segment_ids), Render.status.in_(sorted(ACTIVE_STATUSES)))
+            .values(status=CANCELED)
         )
         await db.commit()
         await db.refresh(job)
@@ -211,23 +220,42 @@ async def cancel_job(db: AsyncSession, user_id: Any, job_id: UUID) -> Job:
 
 
 async def delete_job(db: AsyncSession, user_id: Any, job_id: UUID) -> None:
-    """Hapus job, semua barisnya, media mentah, dan hasil render.
+    """Hapus job, semua barisnya, dan folder job beserta seluruh isinya.
 
-    Salinan bernama di ``output/clips/<job_id>`` sengaja TIDAK dihapus: itu
-    folder milik pengguna, dan mungkin sudah dipakai di luar aplikasi.
+    Berbeda dari tata letak lama (yang memisahkan berkas kanonik dari salinan
+    untuk pengguna), sekarang tidak ada berkas job di luar folder job: folder
+    itu memang milik job ini.
     """
     job = await get_owned_job(db, user_id, job_id)
     media = (await db.execute(select(SourceMedia).where(SourceMedia.job_id == job.id))).scalar_one_or_none()
+    # Dikumpulkan SEBELUM barisnya dihapus: folder job ditentukan oleh r2_key.
     segment_ids = [row[0] for row in (await db.execute(select(Segment.id).where(Segment.job_id == job.id))).all()]
+    keys = [media.r2_key] if media else []
+    keys += [
+        row[0]
+        for row in (
+            await db.execute(
+                select(Render.r2_key).join(Segment, Segment.id == Render.segment_id).where(Segment.job_id == job.id)
+            )
+        ).all()
+        if row[0]
+    ]
 
     await db.execute(delete(Job).where(Job.id == job.id))
     await db.commit()
 
     def _remove_files() -> None:
-        if media is not None and media.r2_key:
-            shutil.rmtree(layout.object_path(layout.RAW, media.r2_key).parent, ignore_errors=True)
+        for key in keys:
+            folder = layout.job_folder_of_key(key)
+            if folder:
+                shutil.rmtree(layout.job_dir(folder), ignore_errors=True)
+            elif layout.is_legacy_key(key):
+                # Baris yang belum dimigrasi: media di clipper-raw/raw/<job_id>/.
+                shutil.rmtree(layout.key_path(key).parent, ignore_errors=True)
         for segment_id in segment_ids:
-            shutil.rmtree(layout.storage_root() / layout.RENDERS / "renders" / str(segment_id), ignore_errors=True)
+            shutil.rmtree(
+                layout.object_path(layout.RENDERS, f"renders/{segment_id}"), ignore_errors=True
+            )
 
     await asyncio.to_thread(_remove_files)
 
@@ -263,9 +291,9 @@ async def list_job_segments(db: AsyncSession, user_id: Any, job_id: UUID) -> tup
 
     note = ""
     if not rows:
-        if job.status == "failed":
+        if job.status == FAILED:
             note = job.error or "Job gagal sebelum analisis menghasilkan segmen."
-        elif job.status in ACTIVE_STATUSES:
+        elif is_active(job.status):
             note = f"Job masih pada tahap '{job.stage}'. Segmen muncul setelah transkripsi dan analisis selesai."
         else:
             note = "Analisis selesai tetapi tidak ada segmen tersimpan. Klik 'Analisis ulang' untuk mencoba lagi."
@@ -339,7 +367,7 @@ async def job_media_file(db: AsyncSession, user_id: Any, job_id: UUID) -> Path:
     """Jalur berkas video sumber, atau 404 bila tidak ada."""
     job = await get_owned_job(db, user_id, job_id)
     media = (await db.execute(select(SourceMedia).where(SourceMedia.job_id == job.id))).scalar_one_or_none()
-    return file_or_404(layout.RAW, media.r2_key if media else None, "Media sumber belum/tidak lagi tersedia.")
+    return file_or_404(media.r2_key if media else None, "Media sumber belum/tidak lagi tersedia.")
 
 
 async def list_job_events(db: AsyncSession, user_id: Any, job_id: UUID, *, limit: int) -> tuple[list[dict[str, Any]], str]:
@@ -365,7 +393,7 @@ async def list_job_events(db: AsyncSession, user_id: Any, job_id: UUID, *, limit
     if not rows:
         note = (
             f"Belum ada log. Job masih pada tahap '{job.stage}'."
-            if job.status in ACTIVE_STATUSES
+            if is_active(job.status)
             else "Tidak ada log tersimpan untuk job ini."
         )
     return items, note
@@ -409,7 +437,7 @@ async def render_job_segment(
     job = await get_owned_job(db, user_id, job_id)
     segment = await get_segment(db, job, segment_id)
     media = (await db.execute(select(SourceMedia).where(SourceMedia.job_id == job.id))).scalar_one_or_none()
-    if media is None or not layout.object_path(layout.RAW, media.r2_key).is_file():
+    if media is None or not layout.key_path(media.r2_key).is_file():
         raise ConflictError(
             "Media sumber sudah tidak ada (dihapus 48 jam setelah render terakhir). Buat job baru."
         )
@@ -417,7 +445,7 @@ async def render_job_segment(
     existing = (
         await db.execute(
             select(Render)
-            .where(Render.segment_id == segment.id, Render.kind == kind, Render.status.in_(["queued", "running"]))
+            .where(Render.segment_id == segment.id, Render.kind == kind, Render.status.in_(sorted(ACTIVE_STATUSES)))
             .order_by(Render.created_at.desc())
         )
     ).scalars().first()
@@ -425,12 +453,12 @@ async def render_job_segment(
         return existing
 
     resolved_mode = (crop_mode or CropMode.FACE_TRACK).value
-    render_row = Render(segment_id=segment.id, kind=kind, crop_mode=resolved_mode, status="queued", preset=preset)
+    render_row = Render(segment_id=segment.id, kind=kind, crop_mode=resolved_mode, status=QUEUED, preset=preset)
     db.add(render_row)
     # Render baru: jangan hapus media mentah di tengah jalan; worker menetapkan
     # ulang batas 48 jam setelah render terakhir selesai.
     media.expires_at = None
-    job.status, job.stage, job.error = "running", "render", None
+    job.status, job.stage, job.error = RUNNING, RENDER, None
     await db.commit()
     await db.refresh(render_row)
 
@@ -442,5 +470,5 @@ async def render_file(db: AsyncSession, user_id: Any, job_id: UUID, render_id: U
     """Baris render dan jalur berkasnya, atau 404 bila berkas belum ada."""
     job = await get_owned_job(db, user_id, job_id)
     render_row = await get_render(db, job, render_id)
-    path = file_or_404(layout.RENDERS, render_row.r2_key, "Berkas render belum tersedia.")
+    path = file_or_404(render_row.r2_key, "Berkas render belum tersedia.")
     return render_row, path

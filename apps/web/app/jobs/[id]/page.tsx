@@ -63,7 +63,7 @@ const ACTION_CONFIRM: Record<JobAction, Omit<ConfirmDialogProps, "open" | "onCon
     description: "Tindakan ini tidak bisa dibatalkan.",
     consequences: [
       "Video sumber, transkrip, klip, dan semua hasil render dihapus.",
-      "Salinan klip di folder output/clips/<job_id> tetap ada.",
+      "Klip yang sudah jadi tetap ada di folder output/<judul>-<id>.",
     ],
     confirmLabel: "Hapus permanen",
     tone: "danger",

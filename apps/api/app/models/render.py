@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from clipper_shared.job_state import JOB_STATUSES
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -36,7 +37,9 @@ RENDER_KINDS: tuple[str, ...] = ("preview", "final")
 
 #: queued|running|done|failed|canceled — ``canceled`` = dihentikan pengguna,
 #: bukan kegagalan (UI tidak menampilkannya sebagai "Render gagal").
-RENDER_STATUSES: tuple[str, ...] = ("queued", "running", "done", "failed", "canceled")
+#: Nilainya sama dengan status job, jadi diambil dari satu sumber
+#: (:mod:`clipper_shared.job_state`) alih-alih ditulis ulang di sini.
+RENDER_STATUSES: tuple[str, ...] = JOB_STATUSES
 
 #: Mode reframing (lihat clipper_shared.reframe.CropMode). Disimpan per render
 #: karena mode yang berbeda mengubah geometri keluaran secara fundamental, dan

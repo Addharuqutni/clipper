@@ -38,6 +38,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     progress: 0,
     clip_count: 5,
     language: "id",
+    // Selalu dikirim backend (JobResponse.live_minutes); `null` = video biasa.
+    // Dijaga oleh apps/api/tests/test_frontend_types.py.
+    live_minutes: null,
     error: null,
     created_at: "2026-09-29T00:00:00Z",
     updated_at: "2026-09-29T00:00:00Z",

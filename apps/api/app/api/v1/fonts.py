@@ -171,7 +171,7 @@ async def upload_font(
             ),
         )
 
-    from app.core.storage import store_font_bytes
+    from clipper_shared.storage import store_font_bytes
 
     # Parsing font memblokir; jangan jalankan di event loop.
     family = await asyncio.to_thread(_font_family, content, filename)
@@ -233,8 +233,7 @@ async def delete_font(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Font tidak ditemukan")
 
     from clipper_shared import storage as layout
-
-    from app.core.storage import delete_object
+    from clipper_shared.storage import delete_object
 
     await db.delete(asset)
     await db.commit()

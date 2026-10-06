@@ -3,6 +3,9 @@
 Worker berjalan di thread pool di dalam proses API (lihat
 :mod:`clipper_shared.dispatcher`), jadi event cukup dikirim lewat
 :class:`LocalEventBus` ke antrean asyncio milik koneksi SSE.
+
+Modul ini adalah **penulis** status job; kosakata status, tahap, dan skala
+progresnya ada di :mod:`clipper_shared.job_state`.
 """
 
 from __future__ import annotations
@@ -15,9 +18,29 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
+from clipper_shared.job_state import (
+    CANCELED,
+    DONE,
+    FAILED,
+    JOB_STATUSES,
+    TERMINAL_STATUSES,
+)
+
 logger = logging.getLogger(__name__)
 
-TERMINAL_STATUSES = frozenset({"done", "failed", "canceled"})
+__all__ = [
+    "CANCELED",
+    "DONE",
+    "FAILED",
+    "JOB_STATUSES",
+    "TERMINAL_STATUSES",
+    "JobCanceled",
+    "LocalEventBus",
+    "emit",
+    "emit_failed",
+    "is_canceled",
+]
+
 
 
 class JobCanceled(Exception):  # noqa: N818 — ini sinyal, bukan kegagalan
@@ -76,7 +99,7 @@ def is_canceled(job_id: str) -> bool:
     except Exception:  # noqa: BLE001 — DB sesaat sibuk tidak boleh membatalkan job
         logger.warning("Gagal memeriksa status pembatalan job %s", job_id, exc_info=True)
         return False
-    return row is None or row[0] == "canceled"
+    return row is None or row[0] == CANCELED
 
 
 def emit(job_id: str, status: str, stage: str, progress: int, message: str | None = None) -> None:
@@ -95,7 +118,7 @@ def emit(job_id: str, status: str, stage: str, progress: int, message: str | Non
     with get_db_connection() as connection, connection.cursor() as cursor:
         cursor.execute("SELECT status FROM jobs WHERE id = %s", (job_id,))
         row = cursor.fetchone()
-        if row is None or row[0] == "canceled":
+        if row is None or row[0] == CANCELED:
             raise JobCanceled(job_id)
         cursor.execute(
             """
@@ -132,7 +155,7 @@ def emit_failed(job_id: str, stage: str, message: str) -> None:
     menutupi exception asli.
     """
     try:
-        emit(job_id, "failed", stage, 0, message)
+        emit(job_id, FAILED, stage, 0, message)
     except JobCanceled:
         pass
     except Exception:

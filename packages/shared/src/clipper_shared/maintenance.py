@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 from clipper_shared import storage as layout
 from clipper_shared.db import get_db_connection, to_db_timestamp, utc_now
+from clipper_shared.job_state import ACTIVE_STATUSES, FAILED, UPLOAD
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +40,26 @@ def reconcile_interrupted_jobs() -> int:
         Jumlah job yang ditandai gagal.
     """
     now = utc_now()
+    # Jumlah placeholder diturunkan dari ACTIVE_STATUSES supaya menambah status
+    # aktif tidak perlu mengedit SQL ini. Yang disisipkan hanya rangkaian "%s";
+    # nilainya tetap parameter, jadi tidak ada masukan pengguna di dalam query.
+    active = sorted(ACTIVE_STATUSES)
+    placeholders = ", ".join("%s" for _ in active)
     with get_db_connection() as connection, connection.cursor() as cursor:
-        cursor.execute("UPDATE renders SET status = 'failed' WHERE status IN ('queued', 'running')")
         cursor.execute(
-            """
+            f"UPDATE renders SET status = %s WHERE status IN ({placeholders})",  # noqa: S608
+            (FAILED, *active),
+        )
+        cursor.execute(
+            f"""
             UPDATE jobs
-               SET status = 'failed', error = %s, progress = 0, updated_at = %s
-             WHERE status IN ('queued', 'running')
+               SET status = %s, error = %s, progress = 0, updated_at = %s
+             WHERE status IN ({placeholders})
                -- Job yang masih menunggu unggahan tidak terhenti: unggahan
                -- dapat dilanjutkan setelah restart (resume).
-               AND COALESCE(stage, '') <> 'upload'
-            """,
-            (INTERRUPTED_MESSAGE, now),
+               AND COALESCE(stage, '') <> %s
+            """,  # noqa: S608
+            (FAILED, INTERRUPTED_MESSAGE, now, *active, UPLOAD),
         )
         count = cursor.rowcount
     if count:
@@ -65,6 +74,9 @@ def purge_expired_raw_media() -> int:
     hanya berkasnya yang dihapus dan ``expires_at`` dikosongkan agar tidak
     diproses dua kali.
 
+    Folder job TIDAK dihapus walau menjadi kosong: di dalamnya ada klip hasil
+    render, dan sisanya akan terisi lagi bila job dirender ulang.
+
     Returns:
         Jumlah berkas yang dihapus.
     """
@@ -78,11 +90,7 @@ def purge_expired_raw_media() -> int:
     deleted = 0
     for media_id, r2_key in rows:
         try:
-            path = layout.object_path(layout.RAW, r2_key)
-            path.unlink(missing_ok=True)
-            # Folder job ikut dibersihkan bila sudah kosong.
-            if path.parent.is_dir() and not any(path.parent.iterdir()):
-                path.parent.rmdir()
+            layout.key_path(r2_key).unlink(missing_ok=True)
             deleted += 1
         except (OSError, ValueError) as exc:
             logger.warning("Gagal menghapus media mentah %s: %s", r2_key, exc)

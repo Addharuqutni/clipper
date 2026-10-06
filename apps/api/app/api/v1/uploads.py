@@ -29,13 +29,13 @@ from typing import Any
 from uuid import UUID
 
 from clipper_shared import storage as layout
+from clipper_shared.job_media import job_source_key
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.v1.auth import CurrentUserOrDev, DbSession
 from app.core.config import settings
-from app.core.storage import build_raw_key
 from app.models.job import Job
 from app.models.source_media import SourceMedia
 from app.services.jobs import get_owned_job
@@ -236,8 +236,8 @@ async def complete_upload(upload_id: str, current_user: CurrentUserOrDev, db: Db
             detail=f"{len(missing)} potongan belum diterima (mis. #{missing[0]}).",
         )
 
-    key = build_raw_key(str(current_user.id), str(job.id), manifest["filename"])
-    target = layout.object_path(layout.RAW, key)
+    key = job_source_key(str(job.id), job.video_title, manifest["filename"])
+    target = layout.key_path(key)
     folder = _upload_dir(upload_id)
 
     def _assemble() -> None:

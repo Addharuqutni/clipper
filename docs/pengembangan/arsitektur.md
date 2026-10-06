@@ -16,7 +16,7 @@ PostgreSQL, Redis, Celery, S3, WSL, atau Docker.
 │  · LocalEventBus: status job → SSE                     │
 └──────────────┬──────────────────────────┬──────────────┘
                ▼                          ▼
-   SQLite output/clipper.db       Disk output/ (raw, render, clips/<job_id>)
+   SQLite output/clipper.db       Disk output/<judul>-<id>/ (sumber + klip)
 
 **Ukuran pool = batas paralel.** Satu transkripsi dan satu render sekaligus
 secara bawaan; pekerjaan lain menunggu di antrean pool-nya. Pool terpisah

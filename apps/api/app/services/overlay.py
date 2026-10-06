@@ -223,7 +223,7 @@ async def create_asset(
 
 async def _store_asset(user_id: Any, filename: str, content: bytes) -> str:
     """Tulis isi berkas ke penyimpanan (lewat thread; I/O berkas)."""
-    from app.core.storage import store_overlay_bytes
+    from clipper_shared.storage import store_overlay_bytes
 
     r2_key, _ = await asyncio.to_thread(store_overlay_bytes, str(user_id), filename, content)
     return r2_key
@@ -232,8 +232,7 @@ async def _store_asset(user_id: Any, filename: str, content: bytes) -> str:
 async def delete_asset(db: AsyncSession, user_id: Any, asset_id: UUID) -> None:
     """Hapus aset beserta SEMUA penempatannya (CASCADE di basis data)."""
     from clipper_shared import storage as layout
-
-    from app.core.storage import delete_object
+    from clipper_shared.storage import delete_object
 
     asset = await get_owned_asset(db, user_id, asset_id)
     r2_key = asset.r2_key

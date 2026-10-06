@@ -12,7 +12,6 @@ import types
 from collections.abc import Iterator
 
 import pytest
-
 from clipper_shared import dispatcher
 
 TIMEOUT_S = 5.0

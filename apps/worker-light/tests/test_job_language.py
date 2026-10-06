@@ -19,7 +19,6 @@ if str(WORKER_ROOT) not in sys.path:
 
 from clipper_shared.stt import TranscriptResult, TranscriptWord  # noqa: E402
 from clipper_shared.subtitles import SubtitleTrack  # noqa: E402
-
 from worker_light import media_fetcher, storage, tasks  # noqa: E402
 from worker_light.media_fetcher import YoutubeMetadata  # noqa: E402
 
@@ -43,11 +42,14 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(storage, "load_provider_config", lambda job_id: {})
     monkeypatch.setattr(storage, "fetch_youtube_cookies", lambda job_id, work_dir: None)
     monkeypatch.setattr(storage, "probe_media", lambda path, job_id: {"size_bytes": 1, "duration_s": 60.0, "width": 1920, "height": 1080, "codec": "h264"})
-    monkeypatch.setattr(storage, "store_downloaded_media", lambda job_id, path: "raw/x.mp4")
     monkeypatch.setattr(storage, "record_source_media", lambda **kwargs: record.setdefault("source_media", kwargs))
     monkeypatch.setattr(storage, "save_transcript", lambda **kwargs: record.setdefault("transcript", kwargs))
     monkeypatch.setattr(storage, "save_segments", lambda **kwargs: None)
-    monkeypatch.setattr(storage, "source_media_path", lambda job_id: tmp_path / "src.mp4")
+    # Akses berkas job ada di clipper_shared.job_media; test ini menguji alur
+    # tahap, bukan penyimpanan, jadi kedua fungsi itu diganti.
+    monkeypatch.setattr(tasks.job_media, "store", lambda job_id, name, path, **kw: f"judul-abc12345/{name}")
+    monkeypatch.setattr(tasks.job_media, "source_path", lambda job_id: tmp_path / "src.mp4")
+    monkeypatch.setattr(tasks.job_media, "source_key", lambda job_id: "judul-abc12345/source.mp4")
     monkeypatch.setattr(storage, "extract_audio", lambda media, work, job_id: tmp_path / "a.wav")
 
     english_only = YoutubeMetadata(
@@ -94,7 +96,7 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
                 model_used="fake",
             )
 
-    monkeypatch.setattr(tasks, "_transcriber", lambda job_id: FakeTranscriber())
+    record["transcriber"] = FakeTranscriber()
     record["settings"] = settings
     record["metadata"] = english_only
     return record
@@ -165,7 +167,7 @@ def test_job_live_meneruskan_live_window(pipeline: dict[str, Any], monkeypatch: 
 @pytest.mark.parametrize(("stored", "expected"), [("id", "id"), ("en", "en"), ("auto", None)])
 def test_transkripsi_memakai_bahasa_job(pipeline: dict[str, Any], stored: str, expected: str | None) -> None:
     pipeline["settings"]["language"] = stored
-    tasks.transcribe_media("job-1")
+    tasks.transcribe_media("job-1", pipeline["transcriber"])
 
     assert pipeline["whisper_language"] == expected
     assert pipeline["submitted"] == ["worker_light.tasks.score_segments"]
@@ -173,11 +175,13 @@ def test_transkripsi_memakai_bahasa_job(pipeline: dict[str, Any], stored: str, e
 
 def test_progres_upload_sampai_analisis_tidak_pernah_turun(pipeline: dict[str, Any]) -> None:
     tasks.ingest_media("job-1", "upload")
-    tasks.transcribe_media("job-1")
+    tasks.transcribe_media("job-1", pipeline["transcriber"])
 
     progress = [value for _stage, value, _message in pipeline["emits"]]
     assert progress == sorted(progress), progress
-    assert pipeline["emits"][-1][:2] == ("analyze", tasks.TRANSCRIBE_END)
+    # Analisis mulai di dasar pitanya sendiri, bukan menempel di ujung
+    # transkripsi: pita progres dimiliki clipper_shared.job_state.
+    assert pipeline["emits"][-1][:2] == ("analyze", tasks.ANALYZE_START)
 
 
 def test_ingest_timeout_handling(pipeline: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:

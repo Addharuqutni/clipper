@@ -24,7 +24,6 @@ os.environ.update(
     {
         "DATABASE_URL": "",
         "LOCAL_STORAGE_DIR": _tmp,
-        "CLIPS_OUTPUT_DIR": f"{_tmp}/clips",
         "WORKER_WORKSPACE_DIR": f"{_tmp}/work",
         "ALLOWED_HOSTS": "localhost,127.0.0.1,testserver",
         # Kunci uji tetap (32 byte nol); bukan rahasia.
