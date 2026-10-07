@@ -65,14 +65,15 @@
   /* Geometri tata letak — SATU sumber kebenaran untuk lebar & jarak.
      Diubah di sini, seluruh aplikasi ikut berubah.
 
-     Catatan pemilihan lebar: 1200px (bukan 1240px) dipilih agar halaman
-     bentuk (upload/youtube) dan halaman data (dashboard) terasa seimbang.
-     Di 1240px, baris tabel dashboard menjadi terlalu panjang sehingga mata
-     sulit menelusuri baris ke kolom terakhir — keterbacaan tabel turun. */
-  --shell-max: 1240px;  /* lebar maksimum header/main/footer */
+     Catatan pemilihan lebar: 1440px dipilih agar halaman bentuk
+     (upload/youtube) dan halaman data (dashboard) ikut memanfaatkan layar
+     lebar. Paragraf tetap dibatasi 62ch (aturan keterbacaan 65-75ch) dan
+     kolom Video tabel tetap dipotong elipsis, jadi lebar ekstra tidak
+     menurunkan keterbacaan. */
+  --shell-max: 1480px;  /* lebar maksimum header/main/footer */
   --shell-pad: 1.25rem; /* padding kiri-kanan wadah */
-  --page-max: 1200px;   /* batas lebar konten halaman */
-  --aside-w: 300px;     /* lebar panel samping (kolom kedua .split) */
+  --page-max: 1440px;   /* batas lebar konten halaman */
+  --aside-w: 340px;     /* lebar panel samping (kolom kedua .split) */
   --gap-section: 1.5rem; /* jarak antar-blok besar dalam satu halaman */
   --gap-grid: 1.25rem;   /* jarak antar-kartu di dalam grid */
   --panel-pad: 1.25rem;  /* padding dalam kartu/.panel */
@@ -618,7 +619,7 @@ a { color: inherit; text-underline-offset: 0.2em; text-decoration-thickness: 2px
 .table-brutal td[data-label="Video"] { min-width: 0; }
 .cell-truncate {
   display: block;
-  max-width: 22rem;
+  max-width: 28rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
