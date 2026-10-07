@@ -36,6 +36,9 @@ class _FakeResponse:
 class _FakeClient:
     """Pengganti ``httpx.AsyncClient`` yang tidak menyentuh jaringan."""
 
+    #: Body JSON permintaan terakhir, untuk memeriksa isi yang dikirim.
+    last_json: dict[str, Any] | None = None
+
     def __init__(self, response: _FakeResponse | Exception) -> None:
         self._response = response
 
@@ -46,6 +49,7 @@ class _FakeClient:
         return False
 
     async def post(self, *args: object, **kwargs: object) -> _FakeResponse:
+        _FakeClient.last_json = kwargs.get("json")  # type: ignore[assignment]
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
@@ -89,10 +93,50 @@ def test_extract_sample_membaca_bentuk_yang_lazim() -> None:
     assert provider_probe.extract_sample("bukan dict") == ""
     assert provider_probe.extract_sample({"choices": [{"message": {"content": " "}}]}) == ""
 
+def test_extract_sample_memakai_reasoning_content_sebagai_upaya_terakhir() -> None:
+    # Model penalaran lewat proxy sebagian hanya mengisi reasoning_content dan
+    # membiarkan content null; itu BUKAN kegagalan koneksi.
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": None,
+                    "reasoning_content": "Endpoint hidup, ini penalaran saya.",
+                }
+            }
+        ]
+    }
+    assert provider_probe.extract_sample(payload) == "Endpoint hidup, ini penalaran saya."
+    assert provider_probe.extract_answer(payload) == ""
+
+
+def test_context_tokens_membaca_angka_dari_jawaban() -> None:
+    # Bentuk jawaban yang lazim dari model.
+    assert provider_probe.context_tokens_from_reply("128000") == 128_000
+    assert provider_probe.context_tokens_from_reply(" 128.000 token") == 128_000
+    assert provider_probe.context_tokens_from_reply("1,048,576") == 1_048_576
+    # Sufiks k/m.
+    assert provider_probe.context_tokens_from_reply("128k") == 128_000
+    assert provider_probe.context_tokens_from_reply("1M") == 1_000_000
+
+
+def test_context_tokens_menolak_jawaban_tak_wajar() -> None:
+    # Tanpa angka, atau angka di luar rentang yang masuk akal, dikembalikan None
+    # agar halusinasi model tidak tersimpan sebagai konteks.
+    assert provider_probe.context_tokens_from_reply("") is None
+    assert provider_probe.context_tokens_from_reply("saya tidak tahu") is None
+    assert provider_probe.context_tokens_from_reply("512") is None
+    assert provider_probe.context_tokens_from_reply("999999999999") is None
+
 
 def test_timeout_uji_koneksi_tetap_terbatas() -> None:
     # Batas waktu adalah bagian dari perilaku: tanpa ini uji koneksi bisa menggantung.
     assert provider_probe.TEST_TIMEOUT_S == 45.0
+
+def test_anggaran_token_uji_koneksi_cukup_untuk_model_penalaran() -> None:
+    # Regresi: anggaran 16 token membuat model penalaran kehabisan token di
+    # tengah berpikir, ``content`` tetap null, dan uji koneksi gagal PALSU.
+    assert provider_probe.PROBE_MAX_TOKENS >= 256
 
 
 async def test_probe_ok_mengembalikan_cuplikan(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,6 +146,20 @@ async def test_probe_ok_mengembalikan_cuplikan(monkeypatch: pytest.MonkeyPatch) 
     assert result["sample"] == "siap"
     assert result["resolved_model"] == "contoh-model"
     assert isinstance(result["latency_ms"], int)
+    # Jawaban tanpa angka: konteks tidak terbaca, bukan error.
+    assert result["context_tokens"] is None
+    # Permintaan harus memakai anggaran token yang cukup untuk model penalaran.
+    assert _FakeClient.last_json is not None
+    assert _FakeClient.last_json["max_tokens"] == provider_probe.PROBE_MAX_TOKENS
+
+
+async def test_probe_ok_mengisi_konteks_dari_jawaban(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(
+        monkeypatch, _FakeResponse(200, {"choices": [{"message": {"content": "128000"}}]})
+    )
+    result = await provider_probe.probe_provider(_config())
+    assert result["ok"] is True
+    assert result["context_tokens"] == 128_000
 
 
 async def test_probe_status_4xx_membawa_hint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -110,6 +168,54 @@ async def test_probe_status_4xx_membawa_hint(monkeypatch: pytest.MonkeyPatch) ->
     assert result["ok"] is False
     assert "HTTP 401" in result["message"]
     assert "API key" in result["hint"]
+
+async def test_probe_ok_saat_hanya_reasoning_content_terisi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Proxy model penalaran bisa mengisi ``reasoning_content`` saja.
+
+    ``content: null`` dengan penalaran terisi BUKAN kegagalan koneksi; uji harus
+    berhasil dan menampilkan penalaran sebagai cuplikan.
+    """
+    _patch_client(
+        monkeypatch,
+        _FakeResponse(
+            200,
+            {
+                "choices": [
+                    {
+                        "message": {"content": None, "reasoning_content": "penalaran singkat"},
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        ),
+    )
+    result = await provider_probe.probe_provider(_config())
+    assert result["ok"] is True
+    assert result["sample"] == "penalaran singkat"
+    # Penalaran bukan sumber angka konteks yang tepercaya.
+    assert result["context_tokens"] is None
+
+async def test_probe_jawaban_terpotong_tidak_menebak_konteks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``finish_reason: "length"`` berarti angka bisa terpotong separuh."""
+    _patch_client(
+        monkeypatch,
+        _FakeResponse(
+            200,
+            {
+                "choices": [
+                    {"message": {"content": "10485"}, "finish_reason": "length"},
+                ]
+            },
+        ),
+    )
+    result = await provider_probe.probe_provider(_config())
+    assert result["ok"] is True
+    assert result["sample"] == "10485"
+    assert result["context_tokens"] is None
 
 
 async def test_probe_bukan_json_dan_tanpa_isi(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -194,7 +300,10 @@ def test_batas_modul_terjaga() -> None:
         "probe_provider",
         "hint_for_status",
         "extract_sample",
+        "extract_answer",
+        "reply_was_truncated",
         "TEST_TIMEOUT_S",
+        "PROBE_MAX_TOKENS",
     ):
         assert not hasattr(ai_settings, name), f"{name} masih ada di ai_settings"
         assert hasattr(provider_probe, name), f"{name} hilang dari provider_probe"

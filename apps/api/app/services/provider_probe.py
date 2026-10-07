@@ -10,6 +10,7 @@ pernah disimpan ulang.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -22,6 +23,35 @@ from app.services import ai_settings
 #: Uji koneksi harus cepat; model besar bisa lambat, jadi batasnya lebih longgar
 #: daripada panggilan biasa tetapi tetap mencegah permintaan menggantung.
 TEST_TIMEOUT_S = 45.0
+
+#: Anggaran token jawaban uji koneksi. **Jangan diturunkan ke belasan token.**
+#: Model penalaran (``reasoning_content``) menghabiskan anggaran ini lebih dulu
+#: untuk berpikir sebelum menulis ``content``. Dengan anggaran sekecil 16 token
+#: jawaban habis di tengah penalaran, ``content`` tetap ``null``, dan uji
+#: koneksi gagal PALSU dengan "tanpa isi yang dapat dibaca" padahal endpoint
+#: sehat. Nilai ini cukup untuk penalaran singkat sekaligus tetap murah.
+PROBE_MAX_TOKENS = 1024
+
+#: Panjang cuplikan jawaban yang ditampilkan di UI.
+_SAMPLE_CHARS = 200
+
+#: Prompt bawaan uji koneksi. Sekaligus membuktikan endpoint hidup DAN
+#: menanyakan jendela konteks model, supaya pengguna tidak perlu menebak ukuran
+#: konteks secara manual. Jawabannya dipakai untuk mengisi kolom "Konteks model"
+#: di setelan (lihat :func:`context_tokens_from_reply`).
+PROBE_PROMPT = (
+    "Jawab HANYA dengan satu angka tanpa penjelasan atau satuan tambahan: "
+    "berapa ukuran jendela konteks (context window) model ini dalam token?"
+)
+
+#: Batas nilai konteks yang masuk akal — selaras dengan validasi setelan
+#: (``ge=1024, le=100_000_000``). Nilai di luar rentang ini diabaikan agar
+#: salah tulis atau halusinasi model tidak tersimpan sebagai konteks.
+_MIN_CONTEXT_TOKENS = 1_024
+_MAX_CONTEXT_TOKENS = 100_000_000
+
+#: Angka pertama pada jawaban, dengan sufiks ``k``/``m`` opsional (mis. "128k").
+_REPLY_NUMBER_RE = re.compile(r"(\d[\d.,]*)\s*([kKmM])?")
 
 
 async def resolve_probe_config(
@@ -75,10 +105,12 @@ async def probe_provider(config: AIProviderConfig) -> dict[str, Any]:
 
     body = {
         "model": config.model,
-        "messages": [{"role": "user", "content": "Balas dengan satu kata: siap"}],
+        "messages": [{"role": "user", "content": PROBE_PROMPT}],
         # Rendah agar jawabannya dapat diprediksi dan murah.
         "temperature": 0.0,
-        "max_tokens": 16,
+        # Lihat PROBE_MAX_TOKENS: terlalu kecil membuat model penalaran
+        # kehabisan anggaran sebelum menulis jawaban.
+        "max_tokens": PROBE_MAX_TOKENS,
     }
 
     started = time.perf_counter()
@@ -137,8 +169,20 @@ async def probe_provider(config: AIProviderConfig) -> dict[str, Any]:
             "resolved_base_url": config.base_url,
             "resolved_model": config.model,
             "latency_ms": latency_ms,
-            "hint": "Format balasan tidak dikenali; pastikan penyedia kompatibel OpenAI.",
+            "hint": (
+                "Balasan kosong. Bila model ini model penalaran, jawabannya "
+                "mungkin habis terpakai untuk berpikir; coba model lain atau "
+                "periksa format balasan penyedia."
+            ),
         }
+
+    # Jawaban yang TERPOTONG (``finish_reason: "length"``) tidak boleh dipakai
+    # menebak konteks: angka yang terpotong separuh (mis. "10485" dari
+    # "1048576") masih terlihat wajar. Cuplikannya tetap ditampilkan, tetapi
+    # kolom konteks dibiarkan kosong agar tidak diisi nilai salah.
+    context_tokens = None
+    if not reply_was_truncated(data):
+        context_tokens = context_tokens_from_reply(extract_answer(data))
 
     return {
         "ok": True,
@@ -147,6 +191,7 @@ async def probe_provider(config: AIProviderConfig) -> dict[str, Any]:
         "resolved_model": config.model,
         "latency_ms": latency_ms,
         "sample": sample,
+        "context_tokens": context_tokens,
     }
 
 
@@ -163,12 +208,15 @@ def hint_for_status(code: int) -> str:
     return "Periksa kembali konfigurasi penyedia."
 
 
-def extract_sample(data: object) -> str:
-    """Ambil cuplikan teks dari respons bergaya OpenAI, dengan aman.
+def extract_answer(data: object) -> str:
+    """Teks jawaban UTUH (tanpa pemotongan) dari respons bergaya OpenAI.
 
-    Struktur respons berbeda antar penyedia; fungsi ini menelusuri bentuk yang
-    umum dan mengembalikan string kosong bila tidak menemukan apa pun — daripada
-    melempar ``KeyError`` yang akan muncul sebagai 500 tanpa penjelasan.
+    Berbeda dari :func:`extract_sample` yang memotong untuk ditampilkan di UI,
+    fungsi ini mengembalikan teks penuh supaya angka konteks di ujung jawaban
+    tidak terpotong. ``reasoning_content`` **tidak** dipakai di sini: isinya
+    penalaran bebas yang penuh angka, jadi tidak layak dijadikan sumber ukuran
+    konteks. Bila penyedia hanya mengisi ``reasoning_content``, hasilnya kosong
+    dan konteks dibiarkan tidak terbaca — lebih baik daripada angka salah.
     """
     if not isinstance(data, dict):
         return ""
@@ -181,15 +229,88 @@ def extract_sample(data: object) -> str:
             if isinstance(message, dict):
                 content = message.get("content")
                 if isinstance(content, str) and content.strip():
-                    return content.strip()[:200]
+                    return content.strip()
             text = first.get("text")
             if isinstance(text, str) and text.strip():
-                return text.strip()[:200]
+                return text.strip()
 
-    # Sebagian penyedia memakai bentuk berbeda.
     for key in ("output_text", "content", "response"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()[:200]
+            return value.strip()
 
     return ""
+
+def extract_sample(data: object) -> str:
+    """Cuplikan teks dari respons bergaya OpenAI untuk ditampilkan di UI.
+
+    Struktur respons berbeda antar penyedia; fungsi ini menelusuri bentuk yang
+    umum dan mengembalikan string kosong bila tidak menemukan apa pun — daripada
+    melempar ``KeyError`` yang akan muncul sebagai 500 tanpa penjelasan.
+
+    ``reasoning_content`` dipakai sebagai upaya terakhir **hanya untuk
+    cuplikan**. Model penalaran menaruh jawaban akhir di ``content``, tetapi
+    sebagian penyedia/proxy hanya mengisi ``reasoning_content`` sehingga
+    ``content`` tetap ``null`` — uji koneksi tetap layak dianggap berhasil.
+    """
+    answer = extract_answer(data)
+    if answer:
+        return answer[:_SAMPLE_CHARS]
+
+    if isinstance(data, dict):
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict):
+                    reasoning = message.get("reasoning_content")
+                    if isinstance(reasoning, str) and reasoning.strip():
+                        return reasoning.strip()[:_SAMPLE_CHARS]
+
+    return ""
+
+def reply_was_truncated(data: object) -> bool:
+    """True bila penyedia memotong jawaban karena anggaran token habis.
+
+    Jawaban terpotong berarti ``content`` mungkin hanya separuh — mis. angka
+    konteks ``"1048576"`` menjadi ``"10485"``. Angka separuh itu masih terlihat
+    wajar, jadi ia tidak boleh dipercaya sebagai ukuran konteks.
+    """
+    if not isinstance(data, dict):
+        return False
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return False
+    first = choices[0]
+    if not isinstance(first, dict):
+        return False
+    return first.get("finish_reason") == "length"
+
+
+def context_tokens_from_reply(reply: str) -> int | None:
+    """Baca jendela konteks dari jawaban model, bila jawabannya berupa angka.
+
+    Prompt uji koneksi meminta model menyebut ukuran konteksnya. Jawaban bebas
+    seperti ``"128000"``, ``"128k token"``, atau ``"1.048.576"`` diterima;
+    yang tidak memuat angka wajar dikembalikan ``None``.
+
+    **Jawaban model bukan sumber tepercaya.** Model kerap menyebut angka yang
+    tidak akurat, jadi nilai ini hanya PREFILL kolom di UI — pengguna tetap
+    meninjaunya, dan deteksi ``GET /models`` yang deterministik (lihat
+    :func:`app.services.ai_settings.detect_context_tokens`) tetap menjadi jaring
+    pengaman saat kolom dibiarkan kosong.
+    """
+    match = _REPLY_NUMBER_RE.search(reply)
+    if match is None:
+        return None
+    digits = match.group(1).replace(".", "").replace(",", "")
+    if not digits.isdigit():
+        return None
+    value = int(digits)
+    suffix = match.group(2)
+    if suffix:
+        value *= 1_000 if suffix.lower() == "k" else 1_000_000
+    if _MIN_CONTEXT_TOKENS <= value <= _MAX_CONTEXT_TOKENS:
+        return value
+    return None

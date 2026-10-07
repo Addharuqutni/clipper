@@ -173,6 +173,8 @@ export interface AiProviderTestResult {
   sample: string;
   /** Saran tindak lanjut saat gagal. */
   hint: string;
+  /** Jendela konteks model dari jawaban uji; `null` bila jawaban tanpa angka. */
+  context_tokens: number | null;
 }
 
 /**

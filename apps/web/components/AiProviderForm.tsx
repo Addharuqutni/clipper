@@ -125,17 +125,22 @@ export default function AiProviderForm() {
     setError(null);
     setResult(null);
     try {
-      setResult(
-        await api.testProvider({
-          preset: draft.preset,
-          base_url: draft.baseUrl.trim() || undefined,
-          model: draft.model.trim() || undefined,
-          // Bila field kunci kosong tetapi sudah tersimpan, server memakai
-          // kunci tersimpan — jadi uji tetap bermakna tanpa mengetik ulang.
-          api_key: draft.apiKey,
-          allow_private_host: draft.allowPrivate,
-        }),
-      );
+      const outcome = await api.testProvider({
+        preset: draft.preset,
+        base_url: draft.baseUrl.trim() || undefined,
+        model: draft.model.trim() || undefined,
+        // Bila field kunci kosong tetapi sudah tersimpan, server memakai
+        // kunci tersimpan — jadi uji tetap bermakna tanpa mengetik ulang.
+        api_key: draft.apiKey,
+        allow_private_host: draft.allowPrivate,
+      });
+      setResult(outcome);
+      // Uji koneksi menanyakan konteks model; bila jawabannya memuat angka,
+      // isi kolom "Konteks model" sebagai draf — pengguna tetap meninjau
+      // sebelum menekan Simpan.
+      if (outcome.ok && outcome.context_tokens) {
+        setDraft((current) => ({ ...current, contextTokens: String(outcome.context_tokens) }));
+      }
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : "Gagal menguji penyedia.");
     } finally {
@@ -319,8 +324,9 @@ export default function AiProviderForm() {
           style={{ marginTop: "0.35rem" }}
         />
         <p className="hint">
-          Kosongkan agar dideteksi dari penyedia saat Simpan. Isi hanya bila
-          penyedia tidak melaporkannya. Menentukan durasi video maksimum.
+          Tekan Uji koneksi untuk mengisinya otomatis dari jawaban model. Kosongkan
+          agar dideteksi dari penyedia saat Simpan; isi manual hanya bila penyedia
+          tidak melaporkannya. Menentukan durasi video maksimum.
         </p>
 
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", flexWrap: "wrap" }}>
@@ -371,6 +377,14 @@ export default function AiProviderForm() {
               <Detail label="Model" value={result.resolved_model || "—"} />
               <Detail label="URL" value={result.resolved_base_url || "—"} />
               <Detail label="Latensi" value={result.latency_ms !== null ? `${result.latency_ms} ms` : "—"} />
+              <Detail
+                label="Konteks model"
+                value={
+                  result.context_tokens
+                    ? `${result.context_tokens.toLocaleString("id-ID")} token`
+                    : "tidak terbaca dari jawaban"
+                }
+              />
             </dl>
 
             {result.sample ? (

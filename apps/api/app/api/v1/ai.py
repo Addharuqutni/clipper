@@ -58,6 +58,10 @@ class ProviderTestResponse(BaseModel):
     sample: str = ""
     #: Kesalahan yang bisa ditindaklanjuti pengguna.
     hint: str = ""
+    #: Jendela konteks model yang disebut jawaban uji (token); ``None`` bila
+    #: jawaban tidak memuat angka wajar. Hanya prefill kolom "Konteks model" —
+    #: pengguna tetap meninjau sebelum menyimpan.
+    context_tokens: int | None = None
 
 
 class ProviderConfigRequest(BaseModel):

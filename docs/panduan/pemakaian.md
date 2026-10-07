@@ -34,7 +34,7 @@ bukan setelah menunggu transkripsi.
 | Model | Nama model, mis. `gemini-2.5-flash`. |
 | API key | **Wajib** kecuali preset `Ollama (lokal)`. Disimpan terenkripsi dan tidak pernah ditampilkan lagi. |
 | Izinkan alamat lokal | **Wajib dicentang** bila URL menunjuk `localhost` atau jaringan lokal. |
-| Konteks model | Biarkan kosong: dideteksi otomatis dari penyedia saat Simpan. Isi hanya bila penyedia tidak melaporkannya. |
+| Konteks model | Terisi otomatis dari jawaban **Uji koneksi** (model ditanya ukuran konteksnya). Kosongkan agar dideteksi dari penyedia saat Simpan; isi manual hanya bila penyedia tidak melaporkannya. |
 
 Tekan **Simpan**, lalu **Uji koneksi**. Pesannya membedakan kunci ditolak
 (401), model tidak ada (404), dan penyedia sedang gangguan (5xx).
