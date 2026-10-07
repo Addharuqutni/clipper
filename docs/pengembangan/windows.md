@@ -53,6 +53,35 @@ yang menunggu, Ctrl+C tidak memunculkan `Terminate batch job (Y/N)?`.
 | Python | 3.14.6 | 3.12–3.14 |
 | Node | 24.13.1 | 22+ |
 
+### Traceback `_call_connection_lost` di log `[api]`
+
+Saat browser membatalkan pemutaran klip di tengah pengiriman berkas (HTTP
+Range), soket ditutup paksa (RST). Di Windows, transport Proactor stdlib
+memanggil `socket.shutdown()` tanpa penjagaan di
+`asyncio/proactor_events.py::_call_connection_lost`, sehingga
+`ConnectionResetError: [WinError 10054]` lolos ke loop exception handler dan
+tercetak sebagai traceback — padahal respons `206 Partial Content` sudah
+terkirim dan tidak ada yang gagal (bpo-83191; masih ada di Python 3.14.6).
+
+Perbaikannya ada di `apps/api/app/main.py`:
+
+- `downgrade_client_disconnect_noise()` dipasang di `lifespan`, jadi berlaku
+  sebelum berkas apa pun disajikan.
+- Hanya `ConnectionResetError` dan `ConnectionAbortedError` yang turun ke
+  `logger.debug`. Error lain diteruskan **utuh** ke handler sebelumnya, atau ke
+  `loop.default_exception_handler`, supaya bug sungguhan tidak ikut hilang.
+- Dijaga `apps/api/tests/test_client_disconnect_logging.py`, termasuk satu test
+  yang memastikan `lifespan` benar-benar memanggilnya.
+
+Catatan verifikasi. RST alami dari klien uji tidak memicu `shutdown()` gagal di
+Python 3.14.6 — setelah RST, `shutdown(SHUT_RDWR)` ternyata berhasil, jadi
+traceback tidak dapat dipancing dengan cara itu. Yang diverifikasi adalah
+**jalur dan efeknya**, dengan callback `call_soon` yang melempar
+`ConnectionResetError` persis seperti `_force_close` → `_call_connection_lost`:
+server uvicorn sungguhan mencetak `Exception in callback` + traceback
+`ConnectionResetError` tanpa penanganan, dan tidak mencetak keduanya setelah
+penanganan terpasang. Kausalitasnya terbukti, bukan sekadar diasumsikan.
+
 ## Bug yang pernah terjadi di jalur ini
 
 Ketiganya gagal **diam-diam** dengan pesan yang menyesatkan. Dicatat agar

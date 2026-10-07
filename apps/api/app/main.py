@@ -39,6 +39,40 @@ from app.services.errors import ServiceError
 
 logger = logging.getLogger(__name__)
 
+#: Exception yang WAJAR terjadi saat klien memutus koneksi streaming dengan
+#: paksa (RST) — mis. browser membatalkan pemutaran klip di tengah pengiriman
+#: berkas lewat HTTP Range.
+#:
+#: Di Windows, ``_ProactorBasePipeTransport._call_connection_lost`` memanggil
+#: ``socket.shutdown()`` TANPA penjagaan (``asyncio/proactor_events.py``), lalu
+#: exception-nya lolos ke loop exception handler dan tercetak sebagai traceback
+#: meski respons sudah terkirim (bpo-83191; masih ada di Python 3.14.6). Ini
+#: bukan kegagalan aplikasi, dan traceback-nya hanya mengotori log serta
+#: menutupi error yang sungguhan.
+_CLIENT_DISCONNECT_ERRORS = (ConnectionResetError, ConnectionAbortedError)
+
+def downgrade_client_disconnect_noise(loop: asyncio.AbstractEventLoop) -> None:
+    """Turunkan error "klien memutus koneksi" ke level debug; sisanya diteruskan.
+
+    Hanya dua jenis ``OSError`` ini yang ditelan, dan hanya di loop exception
+    handler — error lain tetap sampai ke handler sebelumnya (atau ke handler
+    bawaan asyncio) dengan format aslinya. Lihat
+    :data:`_CLIENT_DISCONNECT_ERRORS`.
+    """
+    previous = loop.get_exception_handler()
+
+    def _handler(_loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+        exc = context.get("exception")
+        if isinstance(exc, _CLIENT_DISCONNECT_ERRORS):
+            logger.debug("Klien memutus koneksi saat streaming: %s", exc)
+            return
+        if previous is not None:
+            previous(_loop, context)
+        else:
+            _loop.default_exception_handler(context)
+
+    loop.set_exception_handler(_handler)
+
 
 async def ensure_local_user_row() -> None:
     """Pastikan baris pengguna lokal ada sebelum permintaan pertama.
@@ -76,6 +110,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from clipper_shared.maintenance import reconcile_interrupted_jobs, sweep_workspaces
 
     logger.info("ClipperAI API starting (env=%s version=%s)", settings.ENV, __version__)
+    # Sebelum apa pun menyajikan berkas: redam traceback "klien memutus koneksi"
+    # yang berasal dari stdlib asyncio, bukan dari kode aplikasi.
+    downgrade_client_disconnect_noise(asyncio.get_running_loop())
     await init_db_schema()
     await ensure_local_user_row()
     # Belum ada task yang berjalan di proses baru ini, jadi semua job
