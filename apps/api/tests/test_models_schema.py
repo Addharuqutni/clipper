@@ -144,6 +144,7 @@ class TestRequiredColumns:
                     "completeness",
                     "emotional_arc",
                     "reason",
+                    "mood",
                     "status",
                 },
             ),

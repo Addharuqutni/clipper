@@ -18,7 +18,11 @@ import subprocess
 from typing import Any
 
 from clipper_shared import job_media
-from clipper_shared.ai_provider import effective_allow_private, max_video_minutes
+from clipper_shared.ai_provider import (
+    ProviderConfig,
+    effective_allow_private,
+    max_video_minutes,
+)
 from clipper_shared.dispatcher import submit
 from clipper_shared.job_state import (
     ANALYZE,
@@ -36,6 +40,8 @@ from clipper_shared.scoring import MIN_SEGMENTS, max_clips_for_duration
 from clipper_shared.storage import repo_path
 from clipper_shared.worker_events import JobCanceled, emit, emit_failed
 from clipper_shared.workspace import make_workspace
+
+from worker_light.scoring_client import ScoringOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +383,105 @@ def transcribe_media(job_id: str, transcriber: Any = None) -> dict[str, Any] | N
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def _run_scoring(
+    *,
+    job_id: str,
+    words: list[dict[str, Any]],
+    target_count: int,
+    provider: ProviderConfig,
+) -> ScoringOutcome:
+    """Pilih jalur scoring: agent 3 pass atau satu panggilan.
+
+    Dua jalur sengaja dipertahankan hidup berdampingan:
+
+    * ``MOMENT_AGENT=1`` — agent pemilihan momen (SCOUT/JUDGE/CRITIC). Lebih
+      mahal, menilai tiap kandidat dari teks utuhnya.
+    * selain itu — satu panggilan seperti semula.
+
+    Keduanya hidup bersama supaya ``eval_scoring.py`` bisa membandingkan
+    keduanya pada dataset yang sama. Tanpa perbandingan itu, tidak ada dasar
+    untuk mengatakan agent lebih baik — hanya lebih mahal.
+
+    Args:
+        job_id: Pengenal job, untuk progres dan pemeriksaan pembatalan.
+        words: Kata bertimestamp.
+        target_count: Jumlah segmen yang diinginkan.
+        provider: Konfigurasi penyedia.
+
+    Returns:
+        :class:`ScoringOutcome`. Bila agent gagal menghasilkan apa pun, jatuh
+        ke satu panggilan — kegagalan agent tidak boleh membuang pekerjaan
+        transkripsi yang sudah selesai.
+    """
+    from worker_light import scoring_client
+
+    if os.getenv("MOMENT_AGENT", "0").strip().lower() not in {"1", "true", "yes", "on"}:
+        return scoring_client.score_job(
+            words=words,
+            target_count=target_count,
+            provider=provider,
+            user_direction=str(provider.get("default_direction") or ""),
+            allow_private=effective_allow_private(provider),
+        )
+
+    from clipper_shared.worker_events import is_canceled
+
+    from worker_light.moment_agent import run_moment_agent
+    from worker_light.scoring_client import ScoredSegment
+
+    def progress(message: str) -> None:
+        try:
+            emit(job_id, RUNNING, ANALYZE, stage_progress(ANALYZE, 0.5), message)
+        except JobCanceled:
+            raise
+        except Exception:  # noqa: BLE001 - progres tidak boleh membatalkan scoring
+            logger.debug("Gagal menulis progres agent untuk job %s", job_id, exc_info=True)
+
+    max_end = max((float(word.get("end_s") or 0.0) for word in words), default=0.0) or None
+    agent_segments: list[dict[str, Any]] = []
+    agent_meta: dict[str, Any] = {}
+    try:
+        agent_segments, agent_meta = run_moment_agent(
+            words=words,
+            target_count=target_count,
+            provider=provider,
+            user_direction=str(provider.get("default_direction") or ""),
+            allow_private=effective_allow_private(provider),
+            max_end_s=max_end,
+            is_canceled=lambda: is_canceled(job_id),
+            on_progress=progress,
+        )
+    except JobCanceled:
+        raise
+    except Exception:  # noqa: BLE001 - agent tidak boleh menjatuhkan pipeline
+        logger.exception("Agent pemilihan momen gagal untuk job %s", job_id)
+
+    if agent_segments:
+        logger.info("Agent pemilihan momen job %s: %s", job_id, agent_meta)
+        return ScoringOutcome(
+            segments=[ScoredSegment(**item) for item in agent_segments],
+            provider_label=f"{str(provider.get('preset') or 'ai')}+agent",
+        )
+
+    # Agent menghasilkan kosong: catat, lalu pakai jalur lama. Jangan
+    # mengembalikan error — transkripsi sudah selesai dan masih bisa dipakai.
+    logger.warning(
+        "Agent tidak menghasilkan segmen untuk job %s (%s); jatuh ke satu panggilan.",
+        job_id,
+        agent_meta.get("error") or "tanpa keterangan",
+    )
+    fallback = scoring_client.score_job(
+        words=words,
+        target_count=target_count,
+        provider=provider,
+        user_direction=str(provider.get("default_direction") or ""),
+        allow_private=effective_allow_private(provider),
+    )
+    if fallback.error:
+        fallback.error = f"Agent: {agent_meta.get('error') or 'kosong'}. Satu panggilan: {fallback.error}"
+    return fallback
+
+
 def score_segments(job_id: str, target_count: int | None = None) -> dict[str, Any] | None:
     """Tahap analisis: minta kandidat klip ke LLM, simpan, lalu render.
 
@@ -386,7 +491,7 @@ def score_segments(job_id: str, target_count: int | None = None) -> dict[str, An
     menjalankan ulang analisis AI lewat ``POST /jobs/{id}/rescore``.
     """
     from worker_light import storage
-    from worker_light.scoring_client import heuristic_segments, score_job
+    from worker_light.scoring_client import heuristic_segments
 
     try:
         transcript = storage.load_transcript(job_id)
@@ -406,12 +511,11 @@ def score_segments(job_id: str, target_count: int | None = None) -> dict[str, An
         emit(job_id, RUNNING, ANALYZE, stage_progress(ANALYZE, 0.5), f"Scoring {clamped} kandidat segmen{note}")
 
         provider_config = storage.load_provider_config(job_id)
-        outcome = score_job(
+        outcome = _run_scoring(
+            job_id=job_id,
             words=transcript["words"],
             target_count=clamped,
             provider=provider_config,
-            user_direction=str(provider_config.get("default_direction") or ""),
-            allow_private=effective_allow_private(provider_config),
         )
 
         segments = outcome.segments

@@ -200,13 +200,13 @@ def replace_segments(*, job_id: str, candidates: list[Any]) -> list[str]:
                 """
                 INSERT INTO segments
                     (id, job_id, start_s, end_s, score, label,
-                     hook_score, completeness, emotional_arc, reason, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'proposed')
+                     hook_score, completeness, emotional_arc, reason, mood, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'proposed')
                 """,
                 (
                     seg_id, job_id, candidate.start_s, candidate.end_s, candidate.score,
                     candidate.label, candidate.hook_score, candidate.completeness,
-                    candidate.emotional_arc, candidate.reason,
+                    candidate.emotional_arc, candidate.reason, candidate.mood,
                 ),
             )
             inserted.append(seg_id)

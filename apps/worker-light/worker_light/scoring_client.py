@@ -30,9 +30,14 @@ from clipper_shared.ai_provider import (
     resolve_provider,
     transcript_char_budget,
 )
+from clipper_shared.mood import ChatPost
 from clipper_shared.scoring import MAX_LABEL_CHARS
+from clipper_shared.scoring_prompt import (
+    SCORING_PROMPT_VERSION,
+    build_scoring_prompt,
+)
 
-__all__ = ["MAX_LABEL_CHARS"]
+__all__ = ["MAX_LABEL_CHARS", "SCORING_PROMPT_VERSION"]
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +77,13 @@ _TIME_RANGE_RE = re.compile(
 
 @dataclass
 class ScoredSegment:
-    """Satu kandidat segmen hasil penilaian."""
+    """Satu kandidat segmen hasil penilaian.
+
+    Attributes:
+        mood: Klasifikasi suasana (``komedi``/``musik``/``reaksi``/``netral``)
+            dari penanda reaksi di transkrip. ``netral`` berarti tidak ada
+            penanda yang dikenali — bukan klaim bahwa segmennya tidak emosional.
+    """
 
     start_s: float
     end_s: float
@@ -82,6 +93,7 @@ class ScoredSegment:
     completeness: float
     emotional_arc: float
     reason: str
+    mood: str = "netral"
 
 
 @dataclass
@@ -94,6 +106,99 @@ class ScoringOutcome:
     provider_label: str = ""
     error: str = ""
     raw_length: int = 0
+
+
+def _post_chat(
+    config: AIProviderConfig,
+    messages: list[dict[str, str]],
+    *,
+    timeout_s: float,
+) -> str:
+    """Kirim satu permintaan chat dan kembalikan isinya.
+
+    Dipakai untuk tugas kecil (klasifikasi suasana) yang tidak butuh logika
+    retry milik ``score_job``. Kegagalan dikembalikan sebagai string kosong —
+    pemanggil menentukan nilai jatuh-tempo.
+
+    Args:
+        config: Konfigurasi penyedia yang sudah di-resolve.
+        messages: Pesan gaya OpenAI.
+        timeout_s: Batas waktu, detik.
+
+    Returns:
+        Isi balasan, atau string kosong bila gagal.
+    """
+    headers = {"content-type": "application/json"}
+    if config.api_key:
+        headers["authorization"] = f"Bearer {config.api_key}"
+    body = {
+        "model": config.model,
+        "messages": messages,
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"},
+    }
+    try:
+        with httpx.Client(timeout=timeout_s) as client:
+            response = client.post(config.chat_completions_url, headers=headers, json=body)
+    except httpx.HTTPError as exc:
+        logger.warning("Panggilan chat gagal: %s", exc)
+        return ""
+    if response.status_code >= 400:
+        logger.warning("Penyedia membalas HTTP %s.", response.status_code)
+        return ""
+
+    return _extract_content(response.text)
+
+
+def _mood_for(
+    start_s: float,
+    end_s: float,
+    words: list[dict[str, Any]] | None,
+    *,
+    llm_post: ChatPost | None = None,
+    llm_config: AIProviderConfig | None = None,
+) -> str:
+    """Klasifikasi suasana segmen dari penanda reaksi di transkrip.
+
+    Deterministik (``clipper_shared.mood``), bukan LLM: penanda seperti
+    ``[tertawa]`` sudah ada di transkrip YouTube, jadi menghitungnya gratis
+    dan bisa diulang. ``netral`` berarti tidak ada penanda yang dikenali —
+    bukan klaim bahwa segmennya tidak emosional.
+
+    Args:
+        start_s: Awal segmen.
+        end_s: Akhir segmen.
+        words: Seluruh kata transkrip job.
+
+    Returns:
+        Salah satu ``komedi``/``musik``/``reaksi``/``netral``.
+    """
+    from clipper_shared.mood import LLM_MOOD_CATEGORIES, classify_mood, classify_mood_llm
+
+    if not words:
+        return "netral"
+
+    text = " ".join(
+        str(word.get("text") or "")
+        for word in words
+        if start_s <= float(word.get("start_s") or 0.0) < end_s
+    )
+
+    # Opsi A dulu: penanda reaksi sudah ada di transkrip, jadi gratis dan
+    # bisa diulang. Hanya bila tidak ada penanda baruh LLM dipakai.
+    deterministic = classify_mood(text)
+    if deterministic.is_confident:
+        return deterministic.category
+
+    if llm_post is None or llm_config is None:
+        return deterministic.category
+
+    llm_mood = classify_mood_llm(text, post=llm_post, config=llm_config)
+    # Kategori deterministik tidak ditawarkan ke LLM supaya tidak ada dua
+    # sumber yang saling bertentangan untuk hal yang sama.
+    if llm_mood in LLM_MOOD_CATEGORIES:
+        return llm_mood
+    return deterministic.category
 
 
 def sanitize_user_direction(text: str | None) -> str:
@@ -194,53 +299,28 @@ def build_prompt(
     target_count: int,
     user_direction: str = "",
     output_language: str = "Bahasa Indonesia",
+    version: str = SCORING_PROMPT_VERSION,
 ) -> list[dict[str, str]]:
-    """Susun pesan untuk model.
+    """Susun pesan untuk model, dengan rubrik penilaian eksplisit.
+
+    Rubrik (definisi hook / completeness / emotional_arc) tidak lagi ditulis di
+    sini: ia hidup di :mod:`clipper_shared.scoring_prompt` supaya bisa di-tuning
+    dan berversi tanpa menyentuh logika pemanggil.
 
     Susunannya penting: **transkrip lebih dulu, arahan pengguna terakhir**.
     Transkrip podcast 60 menit dapat melewati 100 ribu karakter, dan model
     memberi bobot lebih besar pada bagian akhir — arahan yang diletakkan sebelum
     transkrip akan diabaikan.
     """
-    system = (
-        "Anda menganalisis transkrip video untuk menemukan momen yang layak "
-        "dijadikan klip pendek. Balas HANYA dengan JSON valid, tanpa penjelasan "
-        "tambahan dan tanpa pagar markdown.\n\n"
-        "Format keluaran:\n"
-        '{"segments": [{"start_s": <angka detik>, "end_s": <angka detik>, '
-        '"score": <0-100>, "label": "<ringkas>", "hook_score": <0-1>, '
-        '"completeness": <0-1>, "emotional_arc": <0-1>, "reason": "<alasan>"}]}\n\n'
-        f"Aturan: setiap segmen berdurasi {MIN_SEGMENT_S:.0f}-{MAX_SEGMENT_S:.0f} detik, "
-        "tidak saling tumpang tindih, dan urut menaik berdasarkan start_s."
+    return build_scoring_prompt(
+        transcript=transcript,
+        target_count=target_count,
+        min_s=MIN_SEGMENT_S,
+        max_s=MAX_SEGMENT_S,
+        user_direction=sanitize_user_direction(user_direction),
+        output_language=output_language,
+        version=version,
     )
-
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system},
-        {
-            "role": "user",
-            "content": (
-                f"Temukan sekitar {target_count} segmen terbaik dari transkrip berikut.\n"
-                f"Tulis label dan alasan dalam {output_language}.\n\n"
-                f"--- TRANSKRIP ---\n{transcript}"
-            ),
-        },
-    ]
-
-    cleaned = sanitize_user_direction(user_direction)
-    if cleaned:
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    "--- ARAHAN PENGGUNA ---\n"
-                    f"{cleaned}\n"
-                    "--- AKHIR ARAHAN ---\n"
-                    "Ikuti arahan di atas saat memilih segmen."
-                ),
-            }
-        )
-
-    return messages
 
 
 def _clamp(value: Any, low: float, high: float, fallback: float) -> float:
@@ -258,6 +338,9 @@ def normalize_segments(
     requested_ranges: list[tuple[float, float]] | None = None,
     limit: int | None = None,
     max_end_s: float | None = None,
+    words: list[dict[str, Any]] | None = None,
+    llm_post: Any = None,
+    llm_config: Any = None,
 ) -> list[ScoredSegment]:
     """Ubah objek mentah menjadi segmen tervalidasi.
 
@@ -328,6 +411,7 @@ def normalize_segments(
                 start_s=start_s,
                 end_s=end_s,
                 score=round(score, 2),
+                mood=_mood_for(start_s, end_s, words, llm_post=llm_post, llm_config=llm_config),
                 # Dipotong ke MAX_LABEL_CHARS, BUKAN angka bebas. Kolom
                 # ``segments.label`` adalah varchar(64) dan model Pydantic di
                 # clipper_shared.scoring juga membatasi 64; nilai 80 di sini
@@ -577,7 +661,13 @@ def score_job(
     max_end = max((float(w.get("end_s") or 0.0) for w in words), default=0.0) or None
     return ScoringOutcome(
         segments=normalize_segments(
-            objects, requested_ranges=ranges, limit=target_count, max_end_s=max_end
+            objects,
+            requested_ranges=ranges,
+            limit=target_count,
+            max_end_s=max_end,
+            words=words,
+            llm_post=_post_chat,
+            llm_config=config,
         ),
         recovered_count=skipped,
         provider_label=label,
@@ -638,6 +728,7 @@ def heuristic_segments(words: list[dict[str, Any]], target_count: int) -> list[S
                 completeness=0.5,
                 emotional_arc=0.5,
                 reason="Dipilih tanpa AI berdasarkan kepadatan bicara.",
+                mood=_mood_for(start, end, words),
             )
         )
     scored.sort(key=lambda segment: segment.score, reverse=True)

@@ -329,7 +329,9 @@ class TestSegmentNormalization:
     ) -> list[Any]:
         from worker_light.scoring_client import normalize_segments
 
-        return normalize_segments(raw, requested_ranges=ranges)
+        # ``words`` dipakai untuk klasifikasi suasana; daftar kata kosong
+        # aman untuk uji penyaringan karena tidak ada penanda yang cocok.
+        return normalize_segments(raw, requested_ranges=ranges, words=[])
 
     def test_valid_segment_kept(self) -> None:
         segments = self._normalize(

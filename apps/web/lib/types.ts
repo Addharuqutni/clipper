@@ -79,6 +79,17 @@ export interface Segment {
   score: number | null; label: string | null; hook_score: number | null;
   completeness: number | null; emotional_arc: number | null;
   reason: string | null; status: SegmentStatus;
+  /**
+   * Klasifikasi suasana dari penanda reaksi di transkrip
+   * (`komedi` | `musik` | `reaksi` | `netral`). `netral` berarti tidak ada
+   * penanda yang dikenali — bukan klaim bahwa segmennya tidak emosional.
+   *
+   * Nullable karena kolom ditambahkan setelah tabel pertama kali dibuat, jadi
+   * segmen lama masih kosong di basis data yang sudah ada.
+   *
+   * Belum dipakai UI; ada di sini agar kontrak frontend tetap sinkron dengan API.
+   */
+  mood: string | null;
 }
 
 /** Caption + hashtag AI untuk unggahan klip (FR-4.2). */

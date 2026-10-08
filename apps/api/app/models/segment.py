@@ -56,6 +56,10 @@ class Segment(Base):
     #: 0–1, sama seperti hook_score/completeness (dulu Text; nilai lama dikonversi SQLite).
     emotional_arc: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Klasifikasi suasana dari penanda reaksi di transkrip
+    #: (``clipper_shared.mood``). ``netral`` berarti tidak ada penanda yang
+    #: dikenali — bukan klaim bahwa segmennya tidak emosional.
+    mood: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="proposed")
     created_at: Mapped[datetime] = created_at_column()
 

@@ -48,7 +48,7 @@ class TestNormalizeSegmentsRespectsLimit:
         """Label 200 karakter harus keluar <= ``MAX_LABEL_CHARS``."""
         from worker_light.scoring_client import normalize_segments
 
-        hasil = normalize_segments([_raw_segment(label="L" * 200)])
+        hasil = normalize_segments([_raw_segment(label="L" * 200)], words=[])
         assert len(hasil) == 1, "segmen valid seharusnya lolos saringan durasi"
         assert len(hasil[0].label) <= MAX_LABEL_CHARS, (
             f"label {len(hasil[0].label)} karakter melebihi batas kolom "
@@ -65,7 +65,7 @@ class TestNormalizeSegmentsRespectsLimit:
         """
         from worker_light.scoring_client import normalize_segments
 
-        hasil = normalize_segments([_raw_segment(label="Z" * panjang)])
+        hasil = normalize_segments([_raw_segment(label="Z" * panjang)], words=[])
         assert len(hasil) == 1
         assert len(hasil[0].label) <= MAX_LABEL_CHARS
 
@@ -77,5 +77,5 @@ class TestNormalizeSegmentsRespectsLimit:
         """
         from worker_light.scoring_client import normalize_segments
 
-        hasil = normalize_segments([_raw_segment(reason="R" * 500)])
+        hasil = normalize_segments([_raw_segment(reason="R" * 500)], words=[])
         assert len(hasil[0].reason) > MAX_LABEL_CHARS

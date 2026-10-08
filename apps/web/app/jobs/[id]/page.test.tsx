@@ -59,6 +59,7 @@ function makeSegment(overrides: Partial<Segment> = {}): Segment {
     completeness: 0.7,
     emotional_arc: 0.6,
     reason: "Pertanyaan retoris di awal memancing rasa ingin tahu.",
+    mood: "netral",
     status: "proposed",
     ...overrides,
   };

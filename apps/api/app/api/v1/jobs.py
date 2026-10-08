@@ -97,6 +97,10 @@ class SegmentResponse(BaseModel):
     completeness: float | None
     emotional_arc: float | None
     reason: str | None
+    #: Klasifikasi suasana dari penanda reaksi di transkrip
+    #: (``clipper_shared.mood``). ``netral`` berarti tidak ada penanda yang
+    #: dikenali — bukan klaim bahwa segmennya tidak emosional.
+    mood: str | None
     status: str
 
 
@@ -228,6 +232,7 @@ def _segment_to_response(segment: Segment) -> SegmentResponse:
         completeness=segment.completeness,
         emotional_arc=segment.emotional_arc,
         reason=segment.reason,
+        mood=segment.mood,
         status=segment.status,
     )
 
