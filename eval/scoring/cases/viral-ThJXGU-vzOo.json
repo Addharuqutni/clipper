@@ -1,0 +1,18 @@
+{
+  "slug": "viral-ThJXGU-vzOo",
+  "video_duration_s": 45.0,
+  "target_count": 1,
+  "source_video_id": "ThJXGU-vzOo",
+  "source_view_count": 1185498,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.8s] Anwit lagu putri panggung apakah tercipta di Trans TV Mas Charlie? Gua tahu arah lu ke mana. [tertawa] Enggak usah jawab. Engak usah jawabak jawab. Yang nanya tahu juga ya? Enggak tahu gua\n[15.0s] gak [tertawa] usah jawab. Boleh tahu tahu. [tertawa] E gua berik bahas dong Pak Paks. Bahas bahas. Hah ini puti bas apa enggak?\n[28.5s] Ah usah. [tertawa] Saya sudah terjebak [tertawa] berikutnya. [tertawa]",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 28.5,
+      "note": "Seluruh klik: Gofar hampir emosi. Hook pertanyaan/teasing, ending \"Saya sudah terjebak\" dengan tawa. [label dipotong dari 45s ke akhir transkrip asli 28.5s]"
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 17
+}

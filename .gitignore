@@ -60,6 +60,13 @@ eval/reframe/**/*.mov
 eval/reframe/**/*.webm
 eval/reframe/**/*.m4a
 eval/reframe/**/*.wav
+# Folder kerja pengukuran pemilihan momen (prefix underscore = arsip lokal).
+#
+# Hanya `cases/` yang di-commit: itu bukti angka yang dilaporkan. Folder
+# berawalan underscore berisi kasus yang ditolak (label mekanis, duplikat, atau
+# kasus yang belum berlabel) — arsip kerja, bukan bukti, jadi tidak masuk repo.
+# Isinya boleh dihapus kapan saja tanpa kehilangan apa pun yang dipakai.
+eval/scoring/_*/
 # Tooling lokal
 .omp/
 

@@ -1,0 +1,23 @@
+{
+  "slug": "contoh-kasus",
+  "video_duration_s": 600.0,
+  "target_count": 3,
+  "transcript": "[0.0s] selamat pagi semua terima kasih sudah hadir di episode kali ini\n[12.4s] kita akan bahas satu hal yang menurut saya paling sering disalahpahami\n[24.8s] soal kenapa harga rumah terus naik padahal gaji tidak ikut naik\n[37.2s] saya punya data lima tahun terakhir dan angkanya cukup mengejutkan\n[49.6s] jadi begini pada tahun pertama harga rata-rata masih dua belas ratus juta\n[62.0s] tapi pada tahun kelima angkanya sudah melonjak hampir dua kali lipat\n[74.4s] nah pertanyaannya kenapa bisa begitu apakah karena tanahnya habis\n[86.8s] ternyata bukan itu penyebab utamanya justru ada faktor lain yang lebih besar\n[99.2s] saya akan jelaskan satu per satu supaya kalian bisa menilai sendiri\n[111.6s] faktor pertama adalah suku bunga kredit yang berubah sangat cepat\n[124.0s] faktor kedua yang sering dilupakan adalah biaya material bangunan\n[136.4s] dan faktor ketiga yang paling mengejutkan adalah perilaku investor\n[148.8s] banyak yang membeli rumah bukan untuk ditinggali melainkan untuk disewakan\n[161.2s] jadi ketika Anda melihat harga rumah naik jangan langsung menyalahkan developer\n[173.6s] karena masalahnya jauh lebih struktural daripada yang terlihat di permukaan\n[186.0s] saya pernah berdiskusi dengan seorang teman yang bekerja di bank\n[198.4s] dia bilang separuh kredit yang disetujui tahun lalu bukan untuk rumah pertama\n[210.8s] itu artinya ada permintaan yang datang dari orang yang sudah punya rumah\n[223.2s] dan permintaan seperti ini tidak akan pernah turun walau harga naik\n[235.6s] karena bagi mereka rumah bukan tempat tinggal melainkan aset\n[248.0s] nah sekarang mari kita lihat apa yang bisa dilakukan pemerintah\n[260.4s] ada beberapa kebijakan yang sudah dicoba di negara lain dan terbukti berhasil\n[272.8s] yang paling efektif justru bukan subsidi melainkan pembatasan kepemilikan\n[285.2s] tapi tentu kebijakan seperti ini tidak populer dan sulit diterapkan\n[297.6s] karena akan selalu ada pihak yang merasa dirugikan oleh aturan itu\n[310.0s] jadi pada akhirnya solusinya harus datang dari banyak arah sekaligus\n[322.4s] tidak ada satu kebijakan tunggal yang bisa menyelesaikan masalah ini\n[334.8s] sebelum kita akhiri saya ingin mengingatkan satu hal yang penting\n[347.2s] jangan mengambil keputusan finansial besar hanya karena takut ketinggalan\n[359.6s] hitung dulu kemampuan Anda baru ambil keputusan itu jauh lebih bijak",
+  "expected": [
+    {
+      "start_s": 37.2,
+      "end_s": 86.8,
+      "note": "Hook kuat: menjanjikan data mengejutkan, lalu memberi penjelasan berurutan"
+    },
+    {
+      "start_s": 186.0,
+      "end_s": 235.6,
+      "note": "Cerita lengkap: diskusi dengan teman bank, ada setup dan payoff"
+    },
+    {
+      "start_s": 334.8,
+      "end_s": 359.6,
+      "note": "Penutup emosional: peringatan personal, berdiri sendiri"
+    }
+  ]
+}

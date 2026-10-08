@@ -1,0 +1,18 @@
+{
+  "slug": "viral-w5iNad-HzHw",
+  "video_duration_s": 59.0,
+  "target_count": 1,
+  "source_video_id": "w5iNad-HzHw",
+  "source_view_count": 13329689,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.8s] Sebutin satu nama artis cewek yang pernah lu pacarin tapi publik enggak tahu. Udah gila. [tertawa] [berteriak] Udah gila nih. Pras pras lu gila lu. [tertawa] Sebut aja\n[16.7s] lu gila. Udah boyen udah aja Boyen pernah bilang lu gila lu perasa. [tertawa] Udahlah gua bukar di sini nih. Boyen lu gila lu. Boyen tuh sahabat gua. Sabar lu gila lu pas.\n[31.9s] Ya udah joget Brazil. [tertawa] Brazil entar entar entar. Joget Brazil. Publik enggak tahu. Publik enggak tahu. Artis cewek ya. Pada waktu itu publik enggak tahu kan? Pada waktu itu publik enggak tahu. Kalau enggak ya joget Brazil gua pengin lihat\n[45.9s] lupa. Ada ada gua Renata Muluk [tertawa] Bro. Gua mah apaadanya orangnya bro. [tertawa]\n[59.3s] Yeah.",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 59.0,
+      "note": "Seluruh klik: tantangan sebutin artis sampai payoff \"Renata Muluk\". Pola setup-resistance-payoff paling jelas di korpus."
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 30
+}

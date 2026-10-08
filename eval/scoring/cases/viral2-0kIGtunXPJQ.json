@@ -1,0 +1,18 @@
+{
+  "slug": "viral2-cerita-remin-kabur-pesantren",
+  "video_duration_s": 62.0,
+  "target_count": 1,
+  "source_video_id": "0kIGtunXPJQ",
+  "source_view_count": 2000,
+  "source_channel": "WatonGuyon",
+  "transcript": "[0.0s] Iya besok kan baru gua kabur akhirnya muncul materi ini materi gua yang orang kan gua pesantren di Leuwiliang orang Leuwiliang tuh kalau nanya suka jawab sendiri soalnya ke mana Reka pasar sendiri jawab sendiri gitu\n[23.9s] Nah itu emang kejadian Benar Jadi pas gua tuh niatnya mau ke pasar mau alasannya mau buat peralatan ospek beli gitu mereka mana pasar sendiri jawab sendiri ya\n[41.1s] udah cabut nyampe rumah kabur sendiri Lu kabur sendiri jemput gue nanya-nanya naik angkot apa naiknya di mana bayarnya berapa Nah diuber sama orang pesantren",
+  "transcript_source": "youtube-json3",
+  "timed_segments": 16,
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 50.5,
+      "note": "Seluruh klip: video pendek yang berdiri sendiri."
+    }
+  ]
+}

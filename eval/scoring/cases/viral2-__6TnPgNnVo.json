@@ -1,0 +1,18 @@
+{
+  "slug": "viral2-__6TnPgNnVo",
+  "video_duration_s": 90.0,
+  "target_count": 1,
+  "source_video_id": "__6TnPgNnVo",
+  "source_view_count": 1200,
+  "source_channel": "SKETSANDRIK",
+  "transcript": "[5.9s] [musik] [musik] Gua tuh dulu ya\n[21.4s] masih kecil nih gua kan rumah gua di Depok tapi SD gua Jakarta Selatan. Jauh kan. Akhirnya gua tinggal di rumah nenek gua tuh. Heeh. Dari situlah gua mulai ngerasa umur gua lompat. Oh. Dari dari B nenek lu. Apa yang lu\n[37.2s] rasain? Maksudnya kondisi alam apa atau kondisi bergelek gitu? Apa beng main PS apalagi ke anak kecil tiba-tiba gua punya KTP [tertawa] gitu. Apa maksudnya yang belum seharusnya belum gua dapatin\n[54.1s] tapi lu dapetin gua dapat gitu dapetin haid segala macam mimpi basah gua umur dua waktu itu. Umur dua lu udah mimpi basah. Oh bahkan sebelum SMP lu sudah mengalami lompatan umur itu ya.\n[69.3s] Umur yang itu pokoknya berantakan banget. [tertawa] Pohon duren kok ke Bali. [tertawa]",
+  "transcript_source": "youtube-json3",
+  "timed_segments": 27,
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 82.2,
+      "note": "Seluruh klip: video pendek yang berdiri sendiri."
+    }
+  ]
+}

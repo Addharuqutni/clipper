@@ -1,0 +1,18 @@
+{
+  "slug": "viral-73it7-6v83M",
+  "video_duration_s": 57.0,
+  "target_count": 1,
+  "source_video_id": "73it7-6v83M",
+  "source_view_count": 18631896,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.4s] aku mau jadi komedian Gimana caranya Kang Sule ya latihan aja ada latihannya ada gimana sendiri aja di kaca lucu enggak enggak ya udah enggak usah jadi P komedian syaratnya itu kalau kita ngelihat diri kita sendiri tuh lucu apa\n[15.1s] enggak iya harus dari fisik Ya iyalah ah jadi komedian mah segantung apapun tetap jelek Mau enggak kamu dijelek-jelekin kalau gajinya serius Nung Nunung kan cantik cita-cita aku tuh beneran pengin jadi Nunung jangan jangan komedian Jangan loh nanti kamu di ini apa dioperasi ya Iya Nunung\n[33.6s] kan sebetulnya cantik Nunung tuh tapi bisa jadi jelek Gimana caranya Oh gitu Iya aku tuh kalau aku ngaca aku enggak lucu hidupnya yang lucu hidup kamu selucu apa sih",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 33.6,
+      "note": "Seluruh klik: Nunung mau jadi komedian, Sule menolak. Hook pernyataan keinginan langsung + pertanyaan, ending menggantung (\"hidup kamu selucu apa sih\"). [label dipotong dari 57s ke akhir transkrip asli 33.6s]"
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 19
+}

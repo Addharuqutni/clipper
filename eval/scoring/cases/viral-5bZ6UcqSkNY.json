@@ -1,0 +1,18 @@
+{
+  "slug": "viral-5bZ6UcqSkNY",
+  "video_duration_s": 59.0,
+  "target_count": 1,
+  "source_video_id": "5bZ6UcqSkNY",
+  "source_view_count": 12975939,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.2s] ni beli berapa duit 28 juta tuh kan 28 jut 28 juta gua tawar di jalan langsung Oh I serius mepetin terus engak gua berdiri aja pinggir jalan ada penumpang Pak berapa pak ini mobil 2000 paling ke sonana kata dia\n[18.1s] bukan itu saya mau beli mobilnya masa mas iya R8 juta dah ya udah turuninang gu bilang Gua mau beli hari iniun turun suratatnyaimana langsung dikasih semuanya langsung dikasih S dia\n[32.4s] bawa di situ bang dia bawa ke rumah Oh iya Selesai Ee Kita tawar siang ya sadik ya Si dia selesaikan triknya dulu segala macam malam datang malam namp murah atau enggak bisa menilai mahal murahnya sih Lihat kondisi cuma ya lu nih ya I ini\n[48.5s] dari 28 juta yang lu keluarin I dapatnya udah berapa dapatnya bisa bikin EMP lagi Gua lebih gua rasa bohang d",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 48.5,
+      "note": "Seluruh klik: negosiasi beli mobil 28 juta. Hook angka di awal (\"ni beli berapa duit 28 juta\"), ending terpotong di tengah kalimat (\"Gua lebih gua rasa bohang d\"). [label dipotong dari 59s ke akhir transkrip asli 48.5s]"
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 22
+}

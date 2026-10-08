@@ -1,0 +1,18 @@
+{
+  "slug": "viral-bIeuvsQ4k7g",
+  "video_duration_s": 59.0,
+  "target_count": 1,
+  "source_video_id": "bIeuvsQ4k7g",
+  "source_view_count": 14642433,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.7s] Hal terindah. Jadi gue tuh sama dia tuh pernah gimana gua ceritanya? Eh, dia dia waktu itu kan ini ya, dia\n[17.0s] tuh dulu VJ kan gila loh yang suka banyak banget ada artisnya waktu itu bareng gue su diam i lu dulu sok ganteng banget deh parahus lu mau serius serius ganteng kak gua memang cakep dari kecil jadi dia tuh wah\n[36.6s] ini dia pernah ngomong jadi dia enggak gua engak jangan kak jangan ngomong aja Ih, kok cuman doang? Jangan, jangan jangan jangan jangan jangan iya sambil tapi ngomong sambil nangis gini sur ya. Aku cuma mau bilang sama kamu di mobil\n[52.6s] anjrit soal dulu romantis orangnya. Hah? Udah yut yuk. Ah.",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 52.6,
+      "note": "Seluruh klik: cerita mantan Surya. Hook \"Hal terindah\" lalu langsung cerita, ending terpotong (\"Udah yut yuk. Ah.\"). [label dipotong dari 59s ke akhir transkrip asli 52.6s]"
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 18
+}

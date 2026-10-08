@@ -1,0 +1,18 @@
+{
+  "slug": "viral-fP_XoOuDc-0",
+  "video_duration_s": 59.0,
+  "target_count": 1,
+  "source_video_id": "fP_XoOuDc-0",
+  "source_view_count": 13603862,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.4s] yang yang alkohol yang segini yang mahal banget tuh yang sampai botolnya dia koleksi tuh Azul namanya. Azul Azul. Oh iya iya yang yang I iya iya. Satu Azul berapa? It depends depends tergantung klubnya. Ada yang klub yang jualnya R juta, ada yang R juta, ada yang R juta juga ada. Katakan 10\n[16.9s] beda ya. Oke. Average 10. Gua bawa 10 orang berarti satu orang satu Azul. Tidak tidak itu namanya semua besoknya asem lambung. Kalau satu orang satu Azul, satu orang satu Azul gua juga enggak\n[32.8s] sanggup bayarinnya. Lu juga sanggup. Oh, gitu. Oh, kayak gitu. Iya. Oke. Gua bawa teman-teman palang merah remaja gua ini. Gua minum dulu ya, habis itu lu ya. Enggak ya. I kan sloky sloky sloky biasa atau ke gelas\n[46.3s] atau gelas juga pakai es. Nah, itu lebih lebih irit. Lebih irit. Lebih irit cucu cucu gitu. Oh, gua kebayang berarti ee night out ya R5 juta lah ya. Kira-kira lah ya. Standar. Iya. harusnya harusnya",
+  "expected": [
+    {
+      "start_s": 0.0,
+      "end_s": 46.3,
+      "note": "Seluruh klik: standar party Reza Arap. Hook deskripsi alkohol mahal, arc harga tergantung klub, ending \"night out R5 juta\". [label dipotong dari 59s ke akhir transkrip asli 46.3s]"
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 29
+}

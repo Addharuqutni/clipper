@@ -1,0 +1,18 @@
+{
+  "slug": "viral-7w1Fgs77ieg",
+  "video_duration_s": 59.0,
+  "target_count": 1,
+  "source_video_id": "7w1Fgs77ieg",
+  "source_view_count": 14512114,
+  "source_channel": "TimeeleesPlus+",
+  "transcript": "[0.2s] pada saat patroli ada bocil-bosil yang pada saat kita lewat lari saat dia lari ya kita kejar pada saat kita berhentiin enggak bawa apa-apa Bang enggak bawa apa-apa hanya membawa ee susu kental manis yang sasetan Pas saya ha saya bilang Git enggak Pak bukan\n[18.3s] buat ituan katanya orang saya cuma bilang ha gitu kan akirnya buat ituan tuh buat apa susu kental manis ee dibuat dibalurin supaya baunya enggak nyebar oh Makanya karena saya cuma bilang ha gitu kan Pak bukan buat itu Pak itu teman\n[34.4s] saya yang nyuruh siapa yang nyuruh akhirnya kami dibawa ke tempat yang nyuruh ternyata Mereka lagi di kosan lagiah rupanya udah habis berapa Linting tiga Linting gitu udah mutar Jadi mereka udah Hai semua kan Nah jadi enak interogasinya Wah ini gimana Jadi kalau\n[52.4s] untuk itu urat bohongnya itu udah hilang jadi udahak jadi jujur semua",
+  "expected": [
+    {
+      "start_s": 12.0,
+      "end_s": 48.0,
+      "note": "Inti cerita: pengejaran anak-anak sampai reveal susu kental manis untuk tutup bau. Pembukaan monolog panjang (\"pada saat patroli...\") sengaja dihindari."
+    }
+  ],
+  "transcript_source": "youtube-json3",
+  "timed_segments": 22
+}
