@@ -222,6 +222,32 @@ class TestErrorTranslation:
         message = _translate_ytdlp_error("ERROR: sesuatu yang tidak dikenal\nbaris kedua")
         assert "baris kedua" in message
 
+    def test_403_points_to_cookies(self) -> None:
+        """403 Forbidden tanpa login: gejalanya menipu karena metadata tetap bisa
+        diambil, jadi pesannya harus menyebut cookies, bukan "gagal" generik."""
+        from worker_light.media_fetcher import _translate_ytdlp_error
+
+        message = _translate_ytdlp_error(
+            "ERROR: unable to download video data: HTTP Error 403: Forbidden"
+        )
+        assert "cookies.txt" in message
+        assert "403" not in message.split(":")[0]
+
+    def test_403_does_not_shadow_specific_causes(self) -> None:
+        """Penyebab spesifik tetap menang meski teksnya memuat 403 — aturan 403
+        diletakkan setelahnya dengan sengaja."""
+        from worker_light.media_fetcher import _translate_ytdlp_error
+
+        bot = _translate_ytdlp_error(
+            "ERROR: Sign in to confirm you're not a bot. HTTP Error 403: Forbidden"
+        )
+        assert "verifikasi" in bot.lower()
+
+        age = _translate_ytdlp_error(
+            "ERROR: age restricted, HTTP Error 403: Forbidden"
+        )
+        assert "usia" in age.lower()
+
 
 class TestUntrustedInput:
     """Masukan pengguna tidak boleh bisa mengubah struktur prompt."""

@@ -353,6 +353,19 @@ def _translate_ytdlp_error(stderr: str) -> str:
     if "requested format" in lowered:
         return "Format media tidak tersedia. Coba lagi; bila berulang, laporkan sebagai bug."
 
+    # YouTube memblokir unduhan video tanpa login dengan 403 Forbidden,
+    # sementara metadata (judul, durasi, transkrip) tetap bisa diambil.
+    # Gejalanya menipu: video yang sama bisa dibaca judulnya tapi gagal diunduh.
+    # Aturan ini sengaja berada SETELAH penyebab spesifik di atas, supaya
+    # "age restricted" atau "confirm you're not a bot" tetap mendapat pesan yang
+    # lebih tepat — keduanya juga bisa memunculkan 403.
+    if "403" in lowered and "forbidden" in lowered:
+        return (
+            "YouTube menolak unduhan video karena permintaan ini tidak terlihat "
+            "seperti dari browser yang sudah login. Unggah cookies.txt di halaman "
+            "YouTube, lalu coba lagi."
+        )
+
     tail = (stderr or "").strip().splitlines()
     detail = tail[-1] if tail else "tidak ada detail"
     return f"Gagal mengambil video: {detail}"
